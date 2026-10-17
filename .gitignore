@@ -1,0 +1,26 @@
+# Dependencies & build
+node_modules/
+dist/
+dist-ssr/
+*.log
+
+# Secrets: never commit real env files
+.env
+.env.*
+!.env.example
+
+# Prisma generated client
+backend/src/generated/
+
+# AI-assistant helper files (not part of the project)
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/

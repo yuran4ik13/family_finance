@@ -1,0 +1,171 @@
+/* =========================
+   THEMES
+   Темна тема вмикається атрибутом data-theme="dark" на <html>.
+   Цей файл підключається ПІСЛЯ App.css і перекриває його кольори.
+   ========================= */
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  color: #e6e9f0;
+  background: #0b0f17;
+
+  --bg: #0b0f17;
+  --surface: #141a24;
+  --border: #263042;
+  --text: #e6e9f0;
+  --muted: #8e99ad;
+  --sidebar: #0f1520;
+  --accent: #8b8dff;
+  --accent-soft: rgba(139, 141, 255, 0.14);
+  --success: #3fcf8e;
+  --success-soft: rgba(63, 207, 142, 0.12);
+  --danger: #ff6b7b;
+  --danger-soft: rgba(255, 107, 123, 0.12);
+  --warning: #f2b443;
+  --warning-soft: rgba(242, 180, 67, 0.13);
+  --shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+
+  /* трохи світліша поверхня для карток усередині секцій */
+  --surface-2: #1b2230;
+  --track: #232b3a;
+}
+
+/* ---------- THEME TOGGLE BUTTON ---------- */
+
+.theme-toggle {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.theme-toggle:hover {
+  border-color: var(--muted);
+}
+
+/* щоб кнопки вгорі не ламались у два рядки на вузьких екранах */
+.top-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.live-status,
+.sync__button {
+  white-space: nowrap;
+}
+
+/* ---------- DARK OVERRIDES FOR App.css ---------- */
+
+:root[data-theme='dark'] .sidebar {
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, #0f1520 0%, #0b0f17 100%);
+}
+
+:root[data-theme='dark'] .live-status,
+:root[data-theme='dark'] .period-filter,
+:root[data-theme='dark'] .accounts,
+:root[data-theme='dark'] .analytics,
+:root[data-theme='dark'] .categories,
+:root[data-theme='dark'] .transactions,
+:root[data-theme='dark'] .rules,
+:root[data-theme='dark'] .page-section,
+:root[data-theme='dark'] .dashboard-chart-card,
+:root[data-theme='dark'] .category-card {
+  background: var(--surface);
+}
+
+:root[data-theme='dark'] .balance-card,
+:root[data-theme='dark'] .card,
+:root[data-theme='dark'] .account-card,
+:root[data-theme='dark'] .analytics-row,
+:root[data-theme='dark'] .rules-table__head,
+:root[data-theme='dark'] .empty-state__icon {
+  background: var(--surface-2);
+}
+
+/* світла кнопка на темному фоні */
+:root[data-theme='dark'] .sync__button {
+  background: #e6e9f0;
+  color: #0b0f17;
+}
+
+:root[data-theme='dark'] .sync__button:hover {
+  background: #ffffff;
+}
+
+:root[data-theme='dark'] .rule-form__button {
+  color: #0b0f17;
+}
+
+:root[data-theme='dark'] .eyebrow {
+  color: var(--accent);
+}
+
+:root[data-theme='dark'] .count-pill,
+:root[data-theme='dark'] .category-chip {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+/* review-counter має той самий базовий клас, повертаємо йому жовтий */
+:root[data-theme='dark'] .review-counter {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+:root[data-theme='dark'] .period-filter__button,
+:root[data-theme='dark'] .balance-card__caption,
+:root[data-theme='dark'] .dashboard-currency-group__title,
+:root[data-theme='dark'] .daily-chart__value,
+:root[data-theme='dark'] .daily-chart__label,
+:root[data-theme='dark'] .transaction-item__merchant span,
+:root[data-theme='dark'] .account-card__footer,
+:root[data-theme='dark'] .rules-table__head {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .daily-chart__bar-area,
+:root[data-theme='dark'] .transaction-item,
+:root[data-theme='dark'] .account-card__footer,
+:root[data-theme='dark'] .analytics-period,
+:root[data-theme='dark'] .rules-table__row {
+  border-color: var(--border);
+}
+
+:root[data-theme='dark'] .category-share__track,
+:root[data-theme='dark'] .progress-track {
+  background: var(--track);
+}
+
+:root[data-theme='dark'] .search-field,
+:root[data-theme='dark'] .filter-select,
+:root[data-theme='dark'] .category-select,
+:root[data-theme='dark'] .transaction-row__category-select,
+:root[data-theme='dark'] .rule-form__select,
+:root[data-theme='dark'] .rule-form__input {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .period-filter__button.period-filter__button--active {
+  background: #e6e9f0;
+  color: #0b0f17;
+}
+
+:root[data-theme='dark'] .balance-card--review {
+  border-color: rgba(242, 180, 67, 0.35);
+  background: var(--warning-soft);
+}

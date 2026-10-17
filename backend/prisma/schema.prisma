@@ -1,0 +1,83 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model FamilyMember {
+  id        Int       @id @default(autoincrement())
+  name      String
+  accounts  Account[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Bank {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  accounts  Account[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Account {
+  id             Int          @id @default(autoincrement())
+  externalId String?
+  name           String
+  accountType String?
+  currency       String
+  balance Decimal @default(0) @db.Decimal(18, 2)
+  familyMemberId Int
+  bankId         Int
+
+  familyMember   FamilyMember @relation(fields: [familyMemberId], references: [id])
+  bank           Bank         @relation(fields: [bankId], references: [id])
+  transactions Transaction[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([bankId, externalId])
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  externalId String?
+  accountId   Int
+  categoryId Int?
+  amount      Decimal
+  currency    String
+  description String?
+  merchant    String?
+  type TransactionType
+  date        DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  account     Account  @relation(fields: [accountId], references: [id])
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  @@unique([accountId, externalId])
+}
+
+model Category {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
