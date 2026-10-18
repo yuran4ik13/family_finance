@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { currentUser } from './auth';
 import { prisma } from './prisma';
 
 // =========================
@@ -24,6 +25,7 @@ const MAX_DAYS = 366;
 type AnalyticsType = 'ALL' | 'INCOME' | 'EXPENSE';
 
 type Filters = {
+  userId: number;
   currency: string;
   accountIds: number[];
   categoryIds: number[];
@@ -113,6 +115,9 @@ async function loadTransactions(
 ) {
   const transactions = await prisma.transaction.findMany({
     where: {
+      // only the logged-in user's transactions
+      userId: filters.userId,
+
       date: {
         gte: start,
         lt: endExclusive,
@@ -221,6 +226,7 @@ analyticsRouter.get('/api/reports/analytics', async (req, res) => {
     const currency = /^[A-Z]{3}$/.test(rawCurrency) ? rawCurrency : 'UAH';
 
     const filters: Filters = {
+      userId: currentUser(req).id,
       currency,
       accountIds: parseIdList(req.query.accountIds),
       categoryIds: parseIdList(req.query.categoryIds),

@@ -89,6 +89,53 @@ export async function verifyPassword(
   );
 }
 
+// Passwords that appear in every leaked-password list
+const COMMON_PASSWORDS = new Set([
+  '123456789012',
+  '1234567890123',
+  'qwertyuiop12',
+  'password1234',
+  'passwordpassword',
+  'qwertyqwerty',
+  'iloveyou1234',
+  'administrator',
+  'letmeinletmein',
+  'aaaaaaaaaaaa',
+  '000000000000',
+  '111111111111',
+  'familyfinance',
+  'family_finance',
+  'monobank1234',
+]);
+
+// Returns an error message, or null if the password is acceptable.
+// Length matters most: a long passphrase beats a short "complex" one.
+export function checkNewPassword(
+  password: string,
+  email: string,
+): string | null {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+  }
+
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    return `Password must be at most ${MAX_PASSWORD_LENGTH} characters`;
+  }
+
+  const lower = password.toLowerCase();
+  const emailName = email.split('@')[0]?.toLowerCase() ?? '';
+
+  if (COMMON_PASSWORDS.has(lower) || new Set(lower).size < 4) {
+    return 'This password is too easy to guess';
+  }
+
+  if (emailName.length >= 4 && lower.includes(emailName)) {
+    return 'Password must not contain your email';
+  }
+
+  return null;
+}
+
 // A real hash of a random password. Used when the email doesn't exist,
 // so a wrong email and a wrong password take the same time to answer
 // (otherwise an attacker could find out which emails are registered).

@@ -7,7 +7,9 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit -p .",
     "create-user": "tsx scripts/create-user.ts",
-    "seed:demo": "tsx scripts/seed-demo.ts"
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "test": "NODE_ENV=test tsx --test tests/*.test.ts",
+    "import-env-settings": "tsx scripts/import-env-settings.ts"
   },
   "keywords": [],
   "author": "",

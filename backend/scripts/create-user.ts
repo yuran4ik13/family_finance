@@ -1,10 +1,13 @@
 // Creates a login, or changes the password of an existing one.
 //
-//   npm run create-user -- you@example.com
-//   npm run create-user -- demo@example.com --demo   (read-only demo login)
+//   npm run create-user -- you@example.com            (OWNER: you, the admin)
+//   npm run create-user -- friend@example.com --user  (regular user)
+//   npm run create-user -- demo@example.com --demo    (read-only demo login)
 //
-// There is no public "sign up" page on purpose: only you can create
-// accounts, from the server's terminal.
+// Running it for an existing email changes the password (and logs that
+// user out everywhere). The role only changes if you pass a flag.
+//
+// Every user only ever sees their own data, whatever the role.
 //
 // The password is typed in hidden. For automation you can pass it
 // through the NEW_USER_PASSWORD environment variable instead.
@@ -12,9 +15,10 @@
 import { createInterface } from 'node:readline';
 import { Writable } from 'node:stream';
 
+import { getCategoryMap } from '../src/categorize';
 import {
+  checkNewPassword,
   hashPassword,
-  MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
 } from '../src/password';
 import { prisma } from '../src/prisma';
@@ -50,10 +54,16 @@ function askHidden(question: string): Promise<string> {
 async function main() {
   const args = process.argv.slice(2);
   const email = args.find((arg) => !arg.startsWith('--'))?.trim().toLowerCase();
-  const role = args.includes('--demo') ? 'DEMO' : 'OWNER';
+  const roleFlag = args.includes('--demo')
+    ? 'DEMO'
+    : args.includes('--user')
+      ? 'USER'
+      : args.includes('--owner')
+        ? 'OWNER'
+        : null;
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    console.error('Usage: npm run create-user -- you@example.com [--demo]');
+    console.error('Usage: npm run create-user -- you@example.com [--user | --demo]');
     process.exit(1);
   }
 
@@ -71,28 +81,37 @@ async function main() {
     }
   }
 
-  if (
-    password.length < MIN_PASSWORD_LENGTH ||
-    password.length > MAX_PASSWORD_LENGTH
-  ) {
-    console.error(
-      `Password must be ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} characters long`,
-    );
+  const passwordProblem = checkNewPassword(password, email);
+
+  if (passwordProblem) {
+    console.error(`❌ ${passwordProblem}`);
     process.exit(1);
   }
 
   const passwordHash = await hashPassword(password);
 
-  const user = await prisma.user.upsert({
-    where: { email },
-    // Changing the password also logs out all old sessions
-    update: {
-      passwordHash,
-      role,
-      tokenVersion: { increment: 1 },
-    },
-    create: { email, passwordHash, role },
-  });
+  const existing = await prisma.user.findUnique({ where: { email } });
+
+  const user = existing
+    ? await prisma.user.update({
+        where: { id: existing.id },
+        // Changing the password also logs out all old sessions
+        data: {
+          passwordHash,
+          tokenVersion: { increment: 1 },
+          ...(roleFlag ? { role: roleFlag } : {}),
+        },
+      })
+    : await prisma.user.create({
+        data: {
+          email,
+          passwordHash,
+          role: roleFlag ?? 'OWNER',
+          familyMembers: { create: { name: 'Me' } },
+        },
+      });
+
+  await getCategoryMap(user.id);
 
   console.log(`✅ User ${user.email} saved (role: ${user.role})`);
 }

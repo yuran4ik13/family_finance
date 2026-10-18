@@ -1,36 +1,18 @@
-// Fills the database with FAKE demo data: invented family members,
-// cards and ~90 days of transactions. Use it for screenshots and for a
-// public demo, so real bank data never ends up on the internet.
+// Creates a read-only DEMO login filled with FAKE data: invented family
+// members, cards and ~90 days of transactions. Use it for screenshots and
+// for a public demo, so real bank data never ends up on the internet.
 //
-//   npm run seed:demo            (only works on an EMPTY database)
-//   npm run seed:demo -- --reset (deletes ALL data first - demo DB only!)
+//   DEMO_EMAIL=demo@example.com DEMO_PASSWORD='long-password' npm run seed:demo
+//   ... npm run seed:demo -- --reset   (re-creates the demo user's data)
 //
-// Optionally also creates a read-only demo login:
-//   DEMO_EMAIL=demo@example.com DEMO_PASSWORD=... npm run seed:demo
+// The fake data belongs ONLY to the demo user. Other users' data is never
+// touched, and --reset deletes nothing but the demo user's own records.
+// For a public demo server still use a separate database.
 
+import { getCategoryMap } from '../src/categorize';
 import { Prisma } from '../src/generated/prisma/client';
-import { hashPassword, MIN_PASSWORD_LENGTH } from '../src/password';
+import { checkNewPassword, hashPassword } from '../src/password';
 import { prisma } from '../src/prisma';
-
-const CATEGORIES = [
-  'Groceries',
-  'Cafes & Restaurants',
-  'Transport',
-  'Fuel',
-  'Subscriptions',
-  'Utilities',
-  'Health',
-  'Sports',
-  'Entertainment',
-  'Shopping & Home',
-  'Charity & Donations',
-  'Money Transfer',
-  'Salary',
-  'Family Income',
-  'Refund',
-  'Other Income',
-  'Other',
-];
 
 // merchant, category, typical amount range in UAH, how often per month
 const EXPENSES: Array<[string, string, number, number, number]> = [
@@ -84,39 +66,66 @@ function daysAgo(days: number, hour: number): Date {
 
 async function main() {
   const reset = process.argv.includes('--reset');
+  const demoEmail = process.env.DEMO_EMAIL?.trim().toLowerCase();
+  const demoPassword = process.env.DEMO_PASSWORD ?? '';
 
-  const existing = await prisma.transaction.count();
+  if (!demoEmail) {
+    console.error(
+      "❌ Set DEMO_EMAIL and DEMO_PASSWORD, e.g.:\n" +
+        "   DEMO_EMAIL=demo@example.com DEMO_PASSWORD='choose-a-long-password' npm run seed:demo",
+    );
+    process.exit(1);
+  }
+
+  const passwordProblem = checkNewPassword(demoPassword, demoEmail);
+
+  if (passwordProblem) {
+    console.error(`❌ DEMO_PASSWORD: ${passwordProblem}`);
+    process.exit(1);
+  }
+
+  const existingUser = await prisma.user.findUnique({ where: { email: demoEmail } });
+
+  if (existingUser && existingUser.role !== 'DEMO') {
+    console.error(
+      `❌ ${demoEmail} is a real (${existingUser.role}) account. ` +
+        'Demo data can only go into a DEMO account. Use another email.',
+    );
+    process.exit(1);
+  }
+
+  const passwordHash = await hashPassword(demoPassword);
+
+  const demoUser = existingUser
+    ? await prisma.user.update({
+        where: { id: existingUser.id },
+        data: { passwordHash, tokenVersion: { increment: 1 } },
+      })
+    : await prisma.user.create({
+        data: { email: demoEmail, passwordHash, role: 'DEMO' },
+      });
+
+  const userId = demoUser.id;
+  const existing = await prisma.transaction.count({ where: { userId } });
 
   if (existing > 0 && !reset) {
     console.error(
-      `❌ Database already has ${existing} transactions. ` +
-        'Refusing to mix demo data with real data.\n' +
-        '   Use a separate demo database, or run with --reset ' +
-        '(this DELETES everything).',
+      `❌ The demo account already has ${existing} transactions. ` +
+        'Run with --reset to re-create its data.',
     );
     process.exit(1);
   }
 
   if (reset) {
-    console.log('⚠️  --reset: deleting all data...');
-    await prisma.transaction.deleteMany();
-    await prisma.account.deleteMany();
-    await prisma.familyMember.deleteMany();
-    await prisma.bank.deleteMany();
-    await prisma.category.deleteMany();
-    await prisma.$executeRawUnsafe('DROP TABLE IF EXISTS merchant_rules');
+    console.log(`⚠️  --reset: deleting data of ${demoEmail} only...`);
+    await prisma.transaction.deleteMany({ where: { userId } });
+    await prisma.merchantRule.deleteMany({ where: { userId } });
+    await prisma.account.deleteMany({ where: { userId } });
+    await prisma.familyMember.deleteMany({ where: { userId } });
+    await prisma.category.deleteMany({ where: { userId } });
   }
 
-  const categoryIds: Record<string, number> = {};
-
-  for (const name of CATEGORIES) {
-    const category = await prisma.category.upsert({
-      where: { name },
-      update: {},
-      create: { name },
-    });
-    categoryIds[name] = category.id;
-  }
+  const categoryIds = await getCategoryMap(userId);
 
   const bank = await prisma.bank.upsert({
     where: { name: 'Monobank' },
@@ -125,14 +134,15 @@ async function main() {
   });
 
   const alex = await prisma.familyMember.create({
-    data: { name: 'Alex Demo' },
+    data: { userId, name: 'Alex Demo' },
   });
   const maria = await prisma.familyMember.create({
-    data: { name: 'Maria Demo' },
+    data: { userId, name: 'Maria Demo' },
   });
 
   const uah = await prisma.account.create({
     data: {
+      userId,
       name: 'Monobank Black UAH',
       externalId: 'demo-uah',
       accountType: 'black',
@@ -145,6 +155,7 @@ async function main() {
 
   const eur = await prisma.account.create({
     data: {
+      userId,
       name: 'Monobank Black EUR',
       externalId: 'demo-eur',
       accountType: 'black',
@@ -157,6 +168,7 @@ async function main() {
 
   await prisma.account.create({
     data: {
+      userId,
       name: 'Monobank Black USD',
       externalId: 'demo-usd',
       accountType: 'black',
@@ -182,6 +194,7 @@ async function main() {
   ) => {
     counter++;
     rows.push({
+      userId,
       externalId: `demo-${counter}`,
       accountId,
       currency,
@@ -256,32 +269,9 @@ async function main() {
 
   await prisma.transaction.createMany({ data: rows });
 
-  console.log(`✅ Demo data: 2 family members, 3 cards, ${rows.length} transactions`);
-
-  const demoEmail = process.env.DEMO_EMAIL?.trim().toLowerCase();
-  const demoPassword = process.env.DEMO_PASSWORD;
-
-  if (demoEmail && demoPassword) {
-    if (demoPassword.length < MIN_PASSWORD_LENGTH) {
-      console.error(`❌ DEMO_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters`);
-      process.exit(1);
-    }
-
-    await prisma.user.upsert({
-      where: { email: demoEmail },
-      update: {
-        passwordHash: await hashPassword(demoPassword),
-        role: 'DEMO',
-      },
-      create: {
-        email: demoEmail,
-        passwordHash: await hashPassword(demoPassword),
-        role: 'DEMO',
-      },
-    });
-
-    console.log(`✅ Read-only demo login: ${demoEmail}`);
-  }
+  console.log(
+    `✅ Demo login ${demoEmail} (read-only): 2 family members, 3 cards, ${rows.length} transactions`,
+  );
 }
 
 main()
