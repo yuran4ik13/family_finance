@@ -13,8 +13,8 @@ import {
 } from 'recharts';
 
 import './AnalyticsPage.css';
+import { apiFetch } from './api';
 
-const API_URL = 'http://localhost:3000';
 
 // =========================
 // TYPES
@@ -339,10 +339,10 @@ function AnalyticsPage({ refreshKey = 0 }: AnalyticsPageProps) {
   // Рахунки і категорії для фільтрів - один раз при відкритті
   useEffect(() => {
     Promise.all([
-      fetch(`${API_URL}/api/accounts/summary`).then((response) =>
+      apiFetch(`/api/accounts/summary`).then((response) =>
         response.json(),
       ),
-      fetch(`${API_URL}/api/categories`).then((response) =>
+      apiFetch(`/api/categories`).then((response) =>
         response.json(),
       ),
     ])
@@ -404,7 +404,7 @@ function AnalyticsPage({ refreshKey = 0 }: AnalyticsPageProps) {
 
     const controller = new AbortController();
 
-    fetch(`${API_URL}/api/reports/analytics?${query}`, {
+    apiFetch(`/api/reports/analytics?${query}`, {
       signal: controller.signal,
     })
       .then(async (response) => {
