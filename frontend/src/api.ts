@@ -33,8 +33,50 @@ export async function apiFetch(
 export type CurrentUser = {
   id: number;
   email: string;
-  role: 'OWNER' | 'DEMO';
+  role: 'OWNER' | 'USER' | 'DEMO';
 };
+
+// Reads the server's error message, so the user sees why it failed
+export async function errorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  const data = await response.json().catch(() => null);
+
+  return typeof data?.message === 'string' ? data.message : fallback;
+}
+
+export async function fetchAuthConfig(): Promise<{
+  registrationEnabled: boolean;
+}> {
+  const response = await fetch(`${API_URL}/api/auth/config`, {
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    return { registrationEnabled: false };
+  }
+
+  return response.json();
+}
+
+export async function register(
+  email: string,
+  password: string,
+): Promise<CurrentUser> {
+  const response = await fetch(`${API_URL}/api/auth/register`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorMessage(response, 'Sign up failed'));
+  }
+
+  return response.json();
+}
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
   const response = await fetch(`${API_URL}/api/auth/me`, {
@@ -64,8 +106,7 @@ export async function login(
   });
 
   if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data?.message ?? 'Login failed');
+    throw new Error(await errorMessage(response, 'Login failed'));
   }
 
   return response.json();

@@ -38,6 +38,23 @@ const envSchema = z.object({
     .default('false')
     .transform((value) => value === 'true'),
 
+  // Key that encrypts users' bank tokens in the database (AES-256-GCM).
+  // Exactly 32 random bytes, base64. Generate:  openssl rand -base64 32
+  // If you lose it, saved bank tokens can't be decrypted (users reconnect).
+  ENCRYPTION_KEY: z
+    .string()
+    .refine(
+      (value) => Buffer.from(value, 'base64').length === 32,
+      'ENCRYPTION_KEY must be 32 bytes in base64 (openssl rand -base64 32)',
+    ),
+
+  // "true" opens the Sign up page for everyone. Keep "false" on your own
+  // laptop; turn on only on a server meant for other people.
+  ALLOW_REGISTRATION: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+
   // "strict" when frontend and API share one site (recommended).
   // "none" only if they live on different domains (requires HTTPS).
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('strict'),
@@ -74,6 +91,11 @@ if (weakSecrets.some((weak) => env.JWT_SECRET.toLowerCase().includes(weak))) {
   process.exit(1);
 }
 
+if (Buffer.from(env.ENCRYPTION_KEY, 'base64').toString('base64') === env.JWT_SECRET) {
+  console.error('❌ ENCRYPTION_KEY must be different from JWT_SECRET');
+  process.exit(1);
+}
+
 export const config = {
   isProduction: env.NODE_ENV === 'production',
   port: env.PORT,
@@ -84,4 +106,6 @@ export const config = {
     .filter(Boolean),
   trustProxy: env.TRUST_PROXY,
   cookieSameSite: env.COOKIE_SAMESITE,
+  encryptionKey: Buffer.from(env.ENCRYPTION_KEY, 'base64'),
+  allowRegistration: env.ALLOW_REGISTRATION,
 };

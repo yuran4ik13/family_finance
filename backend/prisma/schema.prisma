@@ -12,14 +12,27 @@ datasource db {
   provider = "postgresql"
 }
 
+// =========================
+// DATA MODEL
+// Every record that holds personal data belongs to exactly one User
+// (userId). All queries filter by the logged-in user, so users can never
+// see or change each other's data. Deleting a user deletes all their data.
+// =========================
+
 model FamilyMember {
   id        Int       @id @default(autoincrement())
+  userId    Int
   name      String
   accounts  Account[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
+// Shared reference data (bank names), contains no personal data
 model Bank {
   id        Int       @id @default(autoincrement())
   name      String    @unique
@@ -29,23 +42,28 @@ model Bank {
 }
 
 model Account {
-  id             Int          @id @default(autoincrement())
-  externalId String?
+  id             Int     @id @default(autoincrement())
+  userId         Int
+  externalId     String?
   name           String
-  accountType String?
+  accountType    String?
   currency       String
-  balance Decimal @default(0) @db.Decimal(18, 2)
+  balance        Decimal @default(0) @db.Decimal(18, 2)
   familyMemberId Int
   bankId         Int
 
-  familyMember   FamilyMember @relation(fields: [familyMemberId], references: [id])
-  bank           Bank         @relation(fields: [bankId], references: [id])
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyMember FamilyMember  @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+  bank         Bank          @relation(fields: [bankId], references: [id])
   transactions Transaction[]
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@unique([bankId, externalId])
+  // The same bank account can be connected by different users
+  // without one overwriting the other
+  @@unique([userId, bankId, externalId])
+  @@index([userId])
 }
 
 enum TransactionType {
@@ -55,39 +73,70 @@ enum TransactionType {
 }
 
 model Transaction {
-  id          Int      @id @default(autoincrement())
-  externalId String?
+  id          Int             @id @default(autoincrement())
+  userId      Int
+  externalId  String?
   accountId   Int
-  categoryId Int?
+  categoryId  Int?
   amount      Decimal
   currency    String
   description String?
   merchant    String?
-  type TransactionType
+  type        TransactionType
   date        DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
-  account     Account  @relation(fields: [accountId], references: [id])
-  category   Category? @relation(fields: [categoryId], references: [id])
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@unique([accountId, externalId])
+  @@index([userId, date])
 }
 
 model Category {
-  id           Int           @id @default(autoincrement())
-  name         String        @unique
-  transactions Transaction[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id            Int            @id @default(autoincrement())
+  userId        Int
+  name          String
+  transactions  Transaction[]
+  merchantRules MerchantRule[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
 }
+
+// "Always put this merchant into this category" (per user)
+model MerchantRule {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  merchant    String
+  // lowercase + trimmed merchant, so "ATB" and "atb " are the same rule
+  merchantKey String
+  categoryId  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, merchantKey])
+}
+
 // =========================
 // AUTH
 // =========================
 
-// OWNER - full access. DEMO - read-only account for a public demo.
+// OWNER - you, the admin of this server (can manage shared bank list).
+// USER  - someone who signed up.
+// DEMO  - read-only account for a public demo.
+// No role can see another user's financial data.
 enum UserRole {
   OWNER
+  USER
   DEMO
 }
 
@@ -95,9 +144,38 @@ model User {
   id           Int      @id @default(autoincrement())
   email        String   @unique
   passwordHash String
-  role         UserRole @default(OWNER)
+  role         UserRole @default(USER)
   // Increase to log the user out on every device (invalidates old tokens)
   tokenVersion Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+
+  // Monobank token, encrypted with AES-256-GCM (never stored as plain text)
+  monobankTokenEnc String?
+
+  // Personal categorization rules, comma separated, lowercase
+  transferMarkers     String @default("")
+  familyIncomeMarkers String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  familyMembers FamilyMember[]
+  accounts      Account[]
+  transactions  Transaction[]
+  categories    Category[]
+  merchantRules MerchantRule[]
+  auditLogs     AuditLog[]
+}
+
+// Security events: logins, failed logins, password changes...
+// The user can see their own log on the Settings page.
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  event     String
+  ip        String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

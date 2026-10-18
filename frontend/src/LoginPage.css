@@ -81,3 +81,24 @@
 .login__brand .brand__mark {
   color: white;
 }
+
+.login__hint {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.login__switch {
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login__switch:hover {
+  text-decoration: underline;
+}

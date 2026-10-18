@@ -49,7 +49,7 @@ export function applySecurityMiddleware(app: Express): void {
     cors({
       origin: config.frontendOrigins,
       credentials: true,
-      methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       allowedHeaders: ['Content-Type'],
       maxAge: 600,
     }),
