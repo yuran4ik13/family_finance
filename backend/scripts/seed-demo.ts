@@ -1,0 +1,292 @@
+// Fills the database with FAKE demo data: invented family members,
+// cards and ~90 days of transactions. Use it for screenshots and for a
+// public demo, so real bank data never ends up on the internet.
+//
+//   npm run seed:demo            (only works on an EMPTY database)
+//   npm run seed:demo -- --reset (deletes ALL data first - demo DB only!)
+//
+// Optionally also creates a read-only demo login:
+//   DEMO_EMAIL=demo@example.com DEMO_PASSWORD=... npm run seed:demo
+
+import { Prisma } from '../src/generated/prisma/client';
+import { hashPassword, MIN_PASSWORD_LENGTH } from '../src/password';
+import { prisma } from '../src/prisma';
+
+const CATEGORIES = [
+  'Groceries',
+  'Cafes & Restaurants',
+  'Transport',
+  'Fuel',
+  'Subscriptions',
+  'Utilities',
+  'Health',
+  'Sports',
+  'Entertainment',
+  'Shopping & Home',
+  'Charity & Donations',
+  'Money Transfer',
+  'Salary',
+  'Family Income',
+  'Refund',
+  'Other Income',
+  'Other',
+];
+
+// merchant, category, typical amount range in UAH, how often per month
+const EXPENSES: Array<[string, string, number, number, number]> = [
+  ['Silpo', 'Groceries', 250, 1400, 9],
+  ['ATB', 'Groceries', 120, 650, 7],
+  ['Novus', 'Groceries', 300, 1100, 3],
+  ['Aroma Kava', 'Cafes & Restaurants', 70, 180, 8],
+  ['Puzata Hata', 'Cafes & Restaurants', 180, 420, 4],
+  ['Glovo', 'Cafes & Restaurants', 250, 650, 3],
+  ['Uklon', 'Transport', 90, 320, 6],
+  ['Bolt', 'Transport', 80, 260, 4],
+  ['OKKO', 'Fuel', 900, 1900, 3],
+  ['WOG', 'Fuel', 800, 1700, 2],
+  ['Apteka ANC', 'Health', 120, 900, 2],
+  ['Sport Life', 'Sports', 900, 900, 1],
+  ['Multiplex', 'Entertainment', 220, 480, 1],
+  ['Rozetka', 'Shopping & Home', 300, 3500, 2],
+  ['Epicentr', 'Shopping & Home', 400, 2500, 1],
+];
+
+const SUBSCRIPTIONS: Array<[string, number, number]> = [
+  ['Netflix', 299, 5],
+  ['Spotify', 169, 12],
+  ['Google One', 89, 20],
+  ['Kyivstar', 250, 3],
+];
+
+const UTILITIES: Array<[string, number, number]> = [
+  ['Kyivteploenergo', 1850, 10],
+  ['YASNO electricity', 980, 11],
+  ['Kyivvodokanal', 420, 12],
+];
+
+// Deterministic "random" so the demo looks the same every time
+let seed = 42;
+function random(): number {
+  seed = (seed * 1664525 + 1013904223) % 4294967296;
+  return seed / 4294967296;
+}
+
+function between(min: number, max: number): number {
+  return Math.round((min + random() * (max - min)) * 100) / 100;
+}
+
+function daysAgo(days: number, hour: number): Date {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  date.setHours(hour, Math.floor(random() * 60), 0, 0);
+  return date;
+}
+
+async function main() {
+  const reset = process.argv.includes('--reset');
+
+  const existing = await prisma.transaction.count();
+
+  if (existing > 0 && !reset) {
+    console.error(
+      `❌ Database already has ${existing} transactions. ` +
+        'Refusing to mix demo data with real data.\n' +
+        '   Use a separate demo database, or run with --reset ' +
+        '(this DELETES everything).',
+    );
+    process.exit(1);
+  }
+
+  if (reset) {
+    console.log('⚠️  --reset: deleting all data...');
+    await prisma.transaction.deleteMany();
+    await prisma.account.deleteMany();
+    await prisma.familyMember.deleteMany();
+    await prisma.bank.deleteMany();
+    await prisma.category.deleteMany();
+    await prisma.$executeRawUnsafe('DROP TABLE IF EXISTS merchant_rules');
+  }
+
+  const categoryIds: Record<string, number> = {};
+
+  for (const name of CATEGORIES) {
+    const category = await prisma.category.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
+    categoryIds[name] = category.id;
+  }
+
+  const bank = await prisma.bank.upsert({
+    where: { name: 'Monobank' },
+    update: {},
+    create: { name: 'Monobank' },
+  });
+
+  const alex = await prisma.familyMember.create({
+    data: { name: 'Alex Demo' },
+  });
+  const maria = await prisma.familyMember.create({
+    data: { name: 'Maria Demo' },
+  });
+
+  const uah = await prisma.account.create({
+    data: {
+      name: 'Monobank Black UAH',
+      externalId: 'demo-uah',
+      accountType: 'black',
+      currency: 'UAH',
+      balance: new Prisma.Decimal(48250.4),
+      familyMemberId: alex.id,
+      bankId: bank.id,
+    },
+  });
+
+  const eur = await prisma.account.create({
+    data: {
+      name: 'Monobank Black EUR',
+      externalId: 'demo-eur',
+      accountType: 'black',
+      currency: 'EUR',
+      balance: new Prisma.Decimal(1320.75),
+      familyMemberId: alex.id,
+      bankId: bank.id,
+    },
+  });
+
+  await prisma.account.create({
+    data: {
+      name: 'Monobank Black USD',
+      externalId: 'demo-usd',
+      accountType: 'black',
+      currency: 'USD',
+      balance: new Prisma.Decimal(860),
+      familyMemberId: maria.id,
+      bankId: bank.id,
+    },
+  });
+
+  type Row = Prisma.TransactionCreateManyInput;
+  const rows: Row[] = [];
+  let counter = 0;
+
+  const add = (
+    accountId: number,
+    currency: string,
+    amount: number,
+    merchant: string,
+    category: string,
+    type: 'INCOME' | 'EXPENSE' | 'TRANSFER',
+    date: Date,
+  ) => {
+    counter++;
+    rows.push({
+      externalId: `demo-${counter}`,
+      accountId,
+      currency,
+      amount: new Prisma.Decimal(amount),
+      description: merchant,
+      merchant,
+      type,
+      date,
+      categoryId: categoryIds[category] ?? null,
+    });
+  };
+
+  const DAYS = 90;
+
+  for (let day = 0; day < DAYS; day++) {
+    for (const [merchant, category, min, max, perMonth] of EXPENSES) {
+      if (random() < perMonth / 30) {
+        add(
+          uah.id,
+          'UAH',
+          -between(min, max),
+          merchant,
+          category,
+          'EXPENSE',
+          daysAgo(day, 8 + Math.floor(random() * 13)),
+        );
+      }
+    }
+  }
+
+  for (let month = 0; month < 3; month++) {
+    for (const [merchant, amount, dayOfMonth] of SUBSCRIPTIONS) {
+      add(
+        uah.id,
+        'UAH',
+        -amount,
+        merchant,
+        'Subscriptions',
+        'EXPENSE',
+        daysAgo(month * 30 + (30 - dayOfMonth), 9),
+      );
+    }
+
+    for (const [merchant, amount, dayOfMonth] of UTILITIES) {
+      add(
+        uah.id,
+        'UAH',
+        -between(amount * 0.85, amount * 1.15),
+        merchant,
+        'Utilities',
+        'EXPENSE',
+        daysAgo(month * 30 + (30 - dayOfMonth), 11),
+      );
+    }
+
+    add(uah.id, 'UAH', 42000, 'Demo Company LLC', 'Salary', 'INCOME',
+      daysAgo(month * 30 + 25, 10));
+    add(uah.id, 'UAH', 5000, 'Maria Demo', 'Family Income', 'INCOME',
+      daysAgo(month * 30 + 12, 18));
+    add(uah.id, 'UAH', -100, 'Come Back Alive', 'Charity & Donations',
+      'EXPENSE', daysAgo(month * 30 + 8, 20));
+    add(uah.id, 'UAH', -8000, 'Transfer to EUR card', 'Money Transfer',
+      'EXPENSE', daysAgo(month * 30 + 20, 12));
+    add(eur.id, 'EUR', 180, 'Transfer from UAH card', 'Money Transfer',
+      'INCOME', daysAgo(month * 30 + 20, 12));
+    add(eur.id, 'EUR', -between(20, 90), 'Booking.com', 'Entertainment',
+      'EXPENSE', daysAgo(month * 30 + 15, 14));
+  }
+
+  add(uah.id, 'UAH', 349, 'Rozetka refund', 'Refund', 'INCOME',
+    daysAgo(17, 13));
+
+  await prisma.transaction.createMany({ data: rows });
+
+  console.log(`✅ Demo data: 2 family members, 3 cards, ${rows.length} transactions`);
+
+  const demoEmail = process.env.DEMO_EMAIL?.trim().toLowerCase();
+  const demoPassword = process.env.DEMO_PASSWORD;
+
+  if (demoEmail && demoPassword) {
+    if (demoPassword.length < MIN_PASSWORD_LENGTH) {
+      console.error(`❌ DEMO_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters`);
+      process.exit(1);
+    }
+
+    await prisma.user.upsert({
+      where: { email: demoEmail },
+      update: {
+        passwordHash: await hashPassword(demoPassword),
+        role: 'DEMO',
+      },
+      create: {
+        email: demoEmail,
+        passwordHash: await hashPassword(demoPassword),
+        role: 'DEMO',
+      },
+    });
+
+    console.log(`✅ Read-only demo login: ${demoEmail}`);
+  }
+}
+
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());
