@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import AnalyticsPage from './AnalyticsPage';
+import SettingsPage from './SettingsPage';
 import './theme.css';
 import './App.css';
 import { apiFetch, useAuth } from './api';
@@ -72,7 +73,8 @@ type Page =
   | 'accounts'
   | 'categories'
   | 'analytics'
-  | 'rules';
+  | 'rules'
+  | 'settings';
 
 type Period = 1 | 7 | 30;
 
@@ -173,6 +175,18 @@ function App() {
   const { user, onLogout } = useAuth();
   // The demo account is read-only: no bank syncs, no edits
   const readOnly = user.role === 'DEMO';
+
+  // null = still checking. Without a connected bank there is nothing to sync.
+  const [bankConnected, setBankConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setBankConnected(Boolean(data?.monobankConnected)))
+      .catch(() => setBankConnected(false));
+  }, []);
+
+  const canSync = !readOnly && bankConnected === true;
 
   const [report, setReport] = useState<ExpenseReport | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -322,7 +336,7 @@ function App() {
     let cancelled = false;
 
     const autoSync = async () => {
-      if (document.hidden || readOnly) {
+      if (document.hidden || !canSync) {
         return;
       }
 
@@ -376,7 +390,7 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [period, readOnly]);
+  }, [period, canSync]);
 
   const changeTransactionCategory = async (
     transactionId: number,
@@ -1192,6 +1206,7 @@ function App() {
     categories: 'Categories',
     analytics: 'Analytics',
     rules: 'Rules',
+    settings: 'Settings',
   }[page];
 
   const pageDescription = {
@@ -1201,6 +1216,7 @@ function App() {
     categories: 'See exactly where your money goes',
     analytics: 'Compare income, expenses, transfers and net results',
     rules: 'Manage merchant categorization rules',
+    settings: 'Bank connection, security and your data',
   }[page];
 
   return (
@@ -1280,6 +1296,17 @@ function App() {
           >
             Rules
           </button>
+
+          <button
+            className={`nav__item ${
+              page === 'settings'
+                ? 'nav__item--active'
+                : ''
+            }`}
+            onClick={() => setPage('settings')}
+          >
+            Settings
+          </button>
         </nav>
       </aside>
 
@@ -1304,6 +1331,13 @@ function App() {
               <span className="read-only-badge">
                 Demo · read-only
               </span>
+            ) : bankConnected === false ? (
+              <button
+                className="sync__button"
+                onClick={() => setPage('settings')}
+              >
+                Connect Monobank
+              </button>
             ) : (
               <>
                 <div className="live-status">
@@ -1634,6 +1668,10 @@ function App() {
            )}
 
         {page === 'rules' && renderRules()}
+
+        {page === 'settings' && (
+          <SettingsPage onBankConnectionChange={setBankConnected} />
+        )}
       </main>
     </div>
   );
