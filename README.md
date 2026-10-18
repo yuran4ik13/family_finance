@@ -49,7 +49,9 @@ With family_finance, a user **connects all their accounts once** and gets **one 
 - 📊 **Analytics page**: spending by category, income vs. expenses by day, top merchants, comparison with the previous period
 - 👨‍👩‍👧 **Family members**: accounts can belong to different family members
 - 🌗 **Light / dark theme**
+- 👥 **Multi-user**: everyone signs up and sees **only their own** cards, transactions and rules
 - 🔐 **Login with email + password**, read-only demo account
+- ⚙️ **Settings**: connect your bank, change password, security log, download or delete all your data
 
 **Coming next**
 
@@ -74,23 +76,31 @@ family_finance/
 ├── backend/            # Express API + Prisma
 │   ├── prisma/         # database schema and migrations
 │   ├── scripts/
-│   │   ├── create-user.ts  # create a login from the terminal
-│   │   └── seed-demo.ts    # fill the DB with fake demo data
+│   │   ├── create-user.ts          # create a login from the terminal
+│   │   ├── seed-demo.ts            # demo login with fake data
+│   │   └── import-env-settings.ts  # one-time move of old .env settings
 │   ├── src/
-│   │   ├── index.ts      # API routes, sync and categorization logic
-│   │   ├── auth.ts       # login, logout, session cookie, access checks
+│   │   ├── app.ts        # Express app: middleware order and routers
+│   │   ├── index.ts      # starts the server
+│   │   ├── routes/       # finance, monobank sync, settings & account
+│   │   ├── categorize.ts # per-user categorization rules
+│   │   ├── auth.ts       # login, sign up, sessions, access checks
 │   │   ├── security.ts   # Helmet, CORS, CSRF check, rate limits, errors
+│   │   ├── crypto.ts     # AES-256-GCM encryption of bank tokens
+│   │   ├── audit.ts      # security log
 │   │   ├── config.ts     # validates .env at startup
-│   │   ├── password.ts   # scrypt password hashing
-│   │   ├── monobank.ts   # Monobank API client
+│   │   ├── password.ts   # scrypt hashing + password policy
+│   │   ├── monobank.ts   # Monobank API client (per-token rate limit)
 │   │   ├── analytics.ts  # analytics reports
 │   │   └── prisma.ts     # database client
+│   ├── tests/          # security tests: users can't reach each other's data
 │   └── .env.example    # environment variables template
 ├── docs/               # screenshots
 └── frontend/           # React app
     └── src/
         ├── AuthGate.tsx    # shows login until the user is signed in
-        ├── LoginPage.tsx
+        ├── LoginPage.tsx   # sign in / sign up
+        ├── SettingsPage.tsx
         ├── api.ts          # all requests to the backend
         ├── App.tsx
         └── AnalyticsPage.tsx
@@ -112,14 +122,15 @@ cd family_finance
 ```bash
 cd backend
 npm install
-cp .env.example .env      # then fill in your own values (JWT_SECRET is required)
-npx prisma migrate dev    # create database tables
+cp .env.example .env      # then fill in your own values
+npx prisma migrate deploy # create database tables
 npx prisma generate       # generate the Prisma client
 npm run create-user -- you@example.com   # create your login (password is asked hidden)
 npm run dev               # http://localhost:3000
 ```
 
-Generate a `JWT_SECRET` with `openssl rand -base64 48`.
+Required secrets in `.env`: `JWT_SECRET` (`openssl rand -base64 48`) and `ENCRYPTION_KEY` (`openssl rand -base64 32`).
+After signing in, open **Settings** and paste your Monobank token.
 
 **3. Set up the frontend** (in a new terminal)
 
@@ -131,30 +142,55 @@ npm run dev               # http://localhost:5173
 
 **4. (Optional) Try it with fake data**
 
-Use a **separate, empty database** for this (e.g. `family_finance_demo` in `DATABASE_URL`):
-
 ```bash
 cd backend
 DEMO_EMAIL=demo@example.com DEMO_PASSWORD='choose-a-long-password' npm run seed:demo
 ```
 
-This creates invented family members, cards and ~200 transactions, plus a **read-only** demo login.
-The script refuses to run on a database that already has transactions.
+This creates a **read-only** demo login with invented family members, cards and ~200 transactions.
+The fake data belongs only to the demo user; nobody else's data is touched.
+For a public demo server, still use a separate database.
+
+**5. Run the security tests** (needs an empty database whose name contains `test`)
+
+```bash
+cd backend
+DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/family_finance_test" npx prisma migrate deploy
+DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/family_finance_test" npm test
+```
 
 ## 🔐 Security
 
-- **Login required** for every API route; there is no public sign-up, accounts are created from the server terminal
-- Passwords are stored only as **scrypt hashes** (salted, slow to brute force)
-- The session is a signed token in an **httpOnly, SameSite=Strict cookie** (Secure over HTTPS): page scripts can't read it, other sites can't use it
-- **Brute-force protection**: max 5 failed logins per email+IP per 15 min, plus general API rate limits
-- **CSRF protection**: data-changing requests from foreign origins are rejected
-- **Input validation** with Zod; request bodies limited to 100 KB
-- **Security headers** with Helmet; errors never leak stack traces
-- **Read-only demo role**: a public demo can't change data or trigger bank syncs
-- **Log out everywhere**: changing the password or calling `/api/auth/logout-all` invalidates all sessions
-- All secrets (database URL, bank tokens, JWT secret, personal categorization rules) live in `.env`, which is **never committed**; the server refuses to start with a missing or weak `JWT_SECRET`
-- Bank tokens are used **only on the backend**; the frontend never sees them
-- **Dependabot** keeps dependencies updated, CI runs type checks and `npm audit`
+**Every user sees only their own data**
+- Each card, transaction, category and rule belongs to one user, and **every database query filters by the logged-in user**
+- Ids from the browser are always checked together with the owner: guessing someone else's id returns "not found"
+- **Automated tests** sign in as a second user and try to read and change the first user's data through every route; CI runs them on every push
+
+**Bank tokens**
+- Each user connects their own Monobank token; it is **encrypted with AES-256-GCM** before it reaches the database
+- The encryption key lives only in the server's `.env`, so a stolen database dump doesn't reveal any token
+- Each encrypted token is bound to its owner and can't be decrypted as another user's
+- The token is never sent back to the browser, not even to its owner
+
+**Accounts**
+- Passwords are stored only as **scrypt hashes**; at least 12 characters, common passwords rejected
+- The session is a signed token in an **httpOnly, SameSite=Strict cookie** (Secure over HTTPS)
+- **Brute-force protection**: max 5 failed logins per email+IP per 15 min, sign-up and sensitive actions rate limited
+- Changing the password or "sign out on all devices" invalidates every other session
+- **Security log** on the Settings page: sign-ins, failed attempts, password and bank changes (kept 90 days)
+- Sign-up is **off by default** (`ALLOW_REGISTRATION`)
+
+**Your data, your rights (GDPR)**
+- **Download** all your data as JSON at any time
+- **Delete** your account: removes every card, transaction, rule, log entry and token
+
+**Server**
+- **CSRF protection**, strict CORS, **security headers** (Helmet), Zod input validation, 100 KB body limit
+- Errors never leak stack traces; the server refuses to start with missing or weak secrets
+- **Read-only demo role** can't change data or trigger bank syncs
+- **Dependabot**, secret scanning and CI (`npm audit`, type checks, security tests)
+
+**Honest limits:** the server has to see transactions to build reports, so whoever controls the server and its `.env` can technically read the data. That's true for almost every finance app; it's limited here by encryption of tokens, the access log and the law (GDPR).
 
 Found a security problem? See [SECURITY.md](SECURITY.md).
 
