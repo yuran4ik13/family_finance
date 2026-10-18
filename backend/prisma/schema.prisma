@@ -81,3 +81,23 @@ model Category {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
+// =========================
+// AUTH
+// =========================
+
+// OWNER - full access. DEMO - read-only account for a public demo.
+enum UserRole {
+  OWNER
+  DEMO
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(OWNER)
+  // Increase to log the user out on every device (invalidates old tokens)
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

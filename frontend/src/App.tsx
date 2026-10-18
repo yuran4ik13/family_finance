@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import AnalyticsPage from './AnalyticsPage';
 import './theme.css';
 import './App.css';
+import { apiFetch, useAuth } from './api';
 
 type ExpenseReport = {
   currency: string;
@@ -75,7 +76,6 @@ type Page =
 
 type Period = 1 | 7 | 30;
 
-const API_URL = 'http://localhost:3000';
 type Theme = 'light' | 'dark';
 
 const THEME_STORAGE_KEY = 'family-finance-theme';
@@ -98,8 +98,8 @@ function getInitialTheme(): Theme {
 } 
 
 async function fetchReport(days: Period): Promise<ExpenseReport> {
-  const response = await fetch(
-    `${API_URL}/api/reports/expenses?days=${days}`,
+  const response = await apiFetch(
+    `/api/reports/expenses?days=${days}`,
   );
 
   if (!response.ok) {
@@ -110,8 +110,8 @@ async function fetchReport(days: Period): Promise<ExpenseReport> {
 }
 
 async function fetchTransactions(): Promise<Transaction[]> {
-  const response = await fetch(
-    `${API_URL}/api/transactions/simple`,
+  const response = await apiFetch(
+    `/api/transactions/simple`,
   );
 
   if (!response.ok) {
@@ -122,8 +122,8 @@ async function fetchTransactions(): Promise<Transaction[]> {
 }
 
 async function fetchAccounts(): Promise<AccountSummary[]> {
-  const response = await fetch(
-    `${API_URL}/api/accounts/summary`,
+  const response = await apiFetch(
+    `/api/accounts/summary`,
   );
 
   if (!response.ok) {
@@ -134,8 +134,8 @@ async function fetchAccounts(): Promise<AccountSummary[]> {
 }
 
 async function fetchCategories(): Promise<Category[]> {
-  const response = await fetch(
-    `${API_URL}/api/categories`,
+  const response = await apiFetch(
+    `/api/categories`,
   );
 
   if (!response.ok) {
@@ -146,8 +146,8 @@ async function fetchCategories(): Promise<Category[]> {
 }
 
 async function fetchMerchantRules(): Promise<MerchantRule[]> {
-  const response = await fetch(
-    `${API_URL}/api/merchant-rules`,
+  const response = await apiFetch(
+    `/api/merchant-rules`,
   );
 
   if (!response.ok) {
@@ -158,8 +158,8 @@ async function fetchMerchantRules(): Promise<MerchantRule[]> {
 }
 
 async function fetchAnalytics(): Promise<AnalyticsSummary> {
-  const response = await fetch(
-    `${API_URL}/api/reports/summary`,
+  const response = await apiFetch(
+    `/api/reports/summary`,
   );
 
   if (!response.ok) {
@@ -170,6 +170,10 @@ async function fetchAnalytics(): Promise<AnalyticsSummary> {
 }
 
 function App() {
+  const { user, onLogout } = useAuth();
+  // The demo account is read-only: no bank syncs, no edits
+  const readOnly = user.role === 'DEMO';
+
   const [report, setReport] = useState<ExpenseReport | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
@@ -277,8 +281,8 @@ function App() {
       setIsSyncing(true);
       setSyncMessage('');
 
-      const accountsResponse = await fetch(
-        `${API_URL}/api/monobank/sync-accounts`,
+      const accountsResponse = await apiFetch(
+        `/api/monobank/sync-accounts`,
         {
           method: 'POST',
         },
@@ -288,8 +292,8 @@ function App() {
         throw new Error('Failed to sync accounts');
       }
 
-      const transactionsResponse = await fetch(
-        `${API_URL}/api/monobank/sync-all-transactions`,
+      const transactionsResponse = await apiFetch(
+        `/api/monobank/sync-all-transactions`,
         {
           method: 'POST',
         },
@@ -318,20 +322,20 @@ function App() {
     let cancelled = false;
 
     const autoSync = async () => {
-      if (document.hidden) {
+      if (document.hidden || readOnly) {
         return;
       }
 
       try {
-        await fetch(
-          `${API_URL}/api/monobank/sync-accounts`,
+        await apiFetch(
+          `/api/monobank/sync-accounts`,
           {
             method: 'POST',
           },
         );
 
-        await fetch(
-          `${API_URL}/api/monobank/sync-all-transactions`,
+        await apiFetch(
+          `/api/monobank/sync-all-transactions`,
           {
             method: 'POST',
           },
@@ -372,7 +376,7 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [period]);
+  }, [period, readOnly]);
 
   const changeTransactionCategory = async (
     transactionId: number,
@@ -381,8 +385,8 @@ function App() {
     try {
       setUpdatingTransactionId(transactionId);
 
-      const response = await fetch(
-        `${API_URL}/api/transactions/${transactionId}`,
+      const response = await apiFetch(
+        `/api/transactions/${transactionId}`,
         {
           method: 'PATCH',
 
@@ -428,8 +432,8 @@ function App() {
     try {
       setSavingRule(true);
 
-      const response = await fetch(
-        `${API_URL}/api/merchant-rules`,
+      const response = await apiFetch(
+        `/api/merchant-rules`,
         {
           method: 'POST',
           headers: {
@@ -467,8 +471,8 @@ function App() {
     categoryId: number,
   ) => {
     try {
-      const response = await fetch(
-        `${API_URL}/api/merchant-rules/${rule.id}`,
+      const response = await apiFetch(
+        `/api/merchant-rules/${rule.id}`,
         {
           method: 'PATCH',
           headers: {
@@ -500,8 +504,8 @@ function App() {
     ruleId: number,
   ) => {
     try {
-      const response = await fetch(
-        `${API_URL}/api/merchant-rules/${ruleId}`,
+      const response = await apiFetch(
+        `/api/merchant-rules/${ruleId}`,
         {
           method: 'DELETE',
         },
@@ -1296,28 +1300,45 @@ function App() {
             >
               {theme === 'dark' ? '☀ Light' : '☾ Dark'}
             </button>
-            <div className="live-status">
-              <span className="live-status__dot" />
-              Auto-sync every 10 min
-            </div>
-
-            <div className="sync">
-            <button
-              className="sync__button"
-              onClick={syncMonobank}
-              disabled={isSyncing}
-            >
-              {isSyncing
-                ? 'Syncing...'
-                : 'Sync Monobank'}
-            </button>
-
-            {syncMessage && (
-              <span className="sync__message">
-                {syncMessage}
+            {readOnly ? (
+              <span className="read-only-badge">
+                Demo · read-only
               </span>
+            ) : (
+              <>
+                <div className="live-status">
+                  <span className="live-status__dot" />
+                  Auto-sync every 10 min
+                </div>
+
+                <div className="sync">
+                  <button
+                    className="sync__button"
+                    onClick={syncMonobank}
+                    disabled={isSyncing}
+                  >
+                    {isSyncing
+                      ? 'Syncing...'
+                      : 'Sync Monobank'}
+                  </button>
+
+                  {syncMessage && (
+                    <span className="sync__message">
+                      {syncMessage}
+                    </span>
+                  )}
+                </div>
+              </>
             )}
-            </div>
+
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={onLogout}
+              title={user.email}
+            >
+              Log out
+            </button>
           </div>
         </div>
 

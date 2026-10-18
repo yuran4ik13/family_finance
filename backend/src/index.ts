@@ -1,23 +1,79 @@
-import cors from 'cors';
+// config must be imported first: it validates .env and stops the
+// server if something important is missing
+import { config } from './config';
+
+import cookieParser from 'cookie-parser';
 import express from 'express';
+import { z } from 'zod';
 
 import {
   getMonobankClientInfo,
   getMonobankStatement,
 } from './monobank';
 import { analyticsRouter } from './analytics';
+import {
+  authRouter,
+  blockDemoWrites,
+  requireAuth,
+} from './auth';
 import { prisma } from './prisma';
+import {
+  applySecurityMiddleware,
+  errorHandler,
+  notFoundHandler,
+} from './security';
 
 const app = express();
-const PORT = 3000;
+const PORT = config.port;
 
-app.use(
-  cors({
-    origin: 'http://localhost:5173',
-  }),
-);
+applySecurityMiddleware(app);
 
-app.use(express.json());
+// Small body limit: nobody needs to send megabytes of JSON here
+app.use(express.json({ limit: '100kb' }));
+app.use(cookieParser());
+
+// Public routes: login / logout / me
+app.use(authRouter);
+
+// Everything under /api below this line requires login.
+// The read-only demo account can't change data.
+app.use('/api', requireAuth, blockDemoWrites);
+
+// =========================
+// VALIDATION
+// Incoming data is checked before it touches the database.
+// =========================
+
+const idParamSchema = z.coerce.number().int().positive();
+
+const nameSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+});
+
+const createAccountSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
+  familyMemberId: z.number().int().positive(),
+  bankId: z.number().int().positive(),
+});
+
+const createTransactionSchema = z.object({
+  accountId: z.number().int().positive(),
+  amount: z.number().finite().refine((value) => Math.abs(value) < 1e12),
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
+  description: z.string().max(500).optional(),
+  merchant: z.string().max(200).optional(),
+  type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']),
+  date: z.coerce.date(),
+  externalId: z.string().max(100).optional(),
+  categoryId: z.number().int().positive().nullable().optional(),
+});
+
+function validationError(res: express.Response) {
+  return res.status(400).json({
+    message: 'Invalid request data',
+  });
+}
 
 // =========================
 // HELPERS
@@ -753,7 +809,13 @@ app.get('/api/banks', async (req, res) => {
 
 app.post('/api/banks', async (req, res) => {
   try {
-    const { name } = req.body;
+    const parsed = nameSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return validationError(res);
+    }
+
+    const { name } = parsed.data;
 
     const bank = await prisma.bank.create({
       data: {
@@ -799,12 +861,18 @@ app.get('/api/accounts', async (req, res) => {
 
 app.post('/api/accounts', async (req, res) => {
   try {
+    const parsed = createAccountSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return validationError(res);
+    }
+
     const {
       name,
       currency,
       familyMemberId,
       bankId,
-    } = req.body;
+    } = parsed.data;
 
     const account = await prisma.account.create({
       data: {
@@ -891,7 +959,13 @@ app.get('/api/categories', async (req, res) => {
 
 app.post('/api/categories', async (req, res) => {
   try {
-    const { name } = req.body;
+    const parsed = nameSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return validationError(res);
+    }
+
+    const { name } = parsed.data;
 
     const category = await prisma.category.create({
       data: {
@@ -1010,6 +1084,12 @@ app.get('/api/transactions/simple', async (req, res) => {
 
 app.post('/api/transactions', async (req, res) => {
   try {
+    const parsed = createTransactionSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return validationError(res);
+    }
+
     const {
       accountId,
       amount,
@@ -1020,7 +1100,7 @@ app.post('/api/transactions', async (req, res) => {
       date,
       externalId,
       categoryId,
-    } = req.body;
+    } = parsed.data;
 
     const transaction =
       await prisma.transaction.create({
@@ -1028,11 +1108,11 @@ app.post('/api/transactions', async (req, res) => {
           accountId,
           amount,
           currency,
-          description,
-          merchant,
+          description: description ?? null,
+          merchant: merchant ?? null,
           type,
-          date: new Date(date),
-          externalId,
+          date,
+          externalId: externalId ?? null,
           categoryId: categoryId ?? null,
         },
       });
@@ -1055,19 +1135,40 @@ app.post('/api/transactions', async (req, res) => {
 
 app.patch('/api/transactions/:id', async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    const categoryId = Number(req.body.categoryId);
+    const id = idParamSchema.safeParse(req.params.id);
+    const categoryIdResult = idParamSchema.safeParse(
+      req.body?.categoryId,
+    );
 
-    if (!Number.isInteger(categoryId)) {
+    if (!id.success || !categoryIdResult.success) {
       return res.status(400).json({
-        message: 'categoryId must be an integer',
+        message: 'Valid transaction id and categoryId are required',
+      });
+    }
+
+    const categoryId = categoryIdResult.data;
+
+    const [existingTransaction, category] = await Promise.all([
+      prisma.transaction.findUnique({
+        where: { id: id.data },
+        select: { id: true },
+      }),
+      prisma.category.findUnique({
+        where: { id: categoryId },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!existingTransaction || !category) {
+      return res.status(404).json({
+        message: 'Transaction or category not found',
       });
     }
 
     const transaction =
       await prisma.transaction.update({
         where: {
-          id,
+          id: id.data,
         },
 
         data: {
@@ -1496,61 +1597,6 @@ app.post(
 );
 
 // =========================
-// TEST MONOBANK STATEMENT
-// =========================
-
-app.get(
-  '/api/monobank/test-statement/:id',
-  async (req, res) => {
-    try {
-      const id = Number(req.params.id);
-
-      const account =
-        await prisma.account.findUnique({
-          where: {
-            id,
-          },
-        });
-
-      if (!account) {
-        return res.status(404).json({
-          message: 'Account not found',
-        });
-      }
-
-      if (!account.externalId) {
-        return res.status(400).json({
-          message:
-            'Account is not connected to Monobank',
-        });
-      }
-
-      const to =
-        Math.floor(Date.now() / 1000);
-
-      const from =
-        to - 24 * 60 * 60;
-
-      const statement =
-        await getMonobankStatement(
-          account.externalId,
-          from,
-          to,
-        );
-
-      return res.json(statement);
-    } catch (error) {
-      console.error(error);
-
-      return res.status(500).json({
-        message:
-          'Failed to fetch Monobank statement',
-      });
-    }
-  },
-);
-
-// =========================
 // SYNC ONE ACCOUNT
 // =========================
 
@@ -1558,7 +1604,15 @@ app.post(
   '/api/monobank/sync-transactions/:id',
   async (req, res) => {
     try {
-      const id = Number(req.params.id);
+      const idResult = idParamSchema.safeParse(req.params.id);
+
+      if (!idResult.success) {
+        return res.status(400).json({
+          message: 'Invalid account id',
+        });
+      }
+
+      const id = idResult.data;
 
       const account =
         await prisma.account.findUnique({
@@ -2197,12 +2251,15 @@ app.get(
   },
 );
 
-// =========================0
+// =========================
 // START SERVER
 // =========================
 
 
 app.use(analyticsRouter);
+
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(
