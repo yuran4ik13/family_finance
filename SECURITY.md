@@ -20,7 +20,7 @@ You'll get a reply within a few days.
 
 ## Supported versions
 
-Only the latest version on the `main` branch is supported.
+Only the latest version on the `master` branch is supported.
 
 ## Running your own copy safely
 
