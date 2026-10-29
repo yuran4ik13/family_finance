@@ -24,3 +24,9 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Xcode (iOS app)
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.build/
