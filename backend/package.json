@@ -38,5 +38,11 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
-  "private": true
+  "private": true,
+  "allowScripts": {
+    "@prisma/engines@7.10.1": true,
+    "prisma@7.10.1": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
+  }
 }
