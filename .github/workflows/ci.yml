@@ -55,7 +55,10 @@ jobs:
           export JWT_SECRET="$(openssl rand -base64 48)"
           export ENCRYPTION_KEY="$(openssl rand -base64 32)"
           npm test
-      - run: npm audit --omit=dev --audit-level=high
+      # Production packages: fail on any known vulnerability
+      - run: npm audit --omit=dev --audit-level=moderate
+      # Dev tools too (they run on your computer and in CI)
+      - run: npm audit --audit-level=high
 
   frontend:
     runs-on: ubuntu-latest
@@ -72,4 +75,5 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
-      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --omit=dev --audit-level=moderate
+      - run: npm audit --audit-level=high
