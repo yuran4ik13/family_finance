@@ -280,6 +280,7 @@ financeRouter.get('/api/transactions/simple', async (req, res) => {
     orderBy: { date: 'desc' },
     select: {
       id: true,
+      accountId: true,
       categoryId: true,
       amount: true,
       currency: true,
@@ -295,6 +296,7 @@ financeRouter.get('/api/transactions/simple', async (req, res) => {
   const result = await Promise.all(
     transactions.map(async (transaction) => ({
       id: transaction.id,
+      accountId: transaction.accountId,
       amount: transaction.amount,
       currency: transaction.currency,
       description: transaction.description,
