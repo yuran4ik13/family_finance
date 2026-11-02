@@ -19,11 +19,16 @@ struct RootView: View {
         ZStack {
             switch model.phase {
             case .launching:
-                ProgressView()
+                ZStack {
+                    Color.appBackground.ignoresSafeArea()
+                    ProgressView().tint(Color.brand)
+                }
             case .signedOut:
                 LoginView()
+                    .transition(.opacity)
             case .signedIn:
                 MainTabView()
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
 
             // When the app goes to the background, iOS takes a screenshot for
@@ -38,6 +43,7 @@ struct RootView: View {
                 }
             }
         }
+        .animation(Motion.spring, value: model.phase)
         .task {
             await model.start()
 
@@ -88,12 +94,11 @@ struct RootView: View {
 private struct PrivacyCover: View {
     var body: some View {
         ZStack {
-            Rectangle()
-                .fill(.ultraThinMaterial)
+            Color.appBackground
 
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 56))
-                .foregroundStyle(.tint)
+                .foregroundStyle(Color.brand)
         }
         .ignoresSafeArea()
     }
@@ -105,21 +110,28 @@ private struct LockView: View {
 
     var body: some View {
         ZStack {
-            Rectangle()
-                .fill(.regularMaterial)
+            Color.appBackground
 
-            VStack(spacing: 16) {
+            VStack(spacing: 18) {
                 Image(systemName: "faceid")
                     .font(.system(size: 60))
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Color.brand)
+                    .symbolEffect(.pulse, options: .repeat(.continuous))
 
                 Text("Family Finance is locked")
-                    .font(.title3.bold())
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Color.textPrimary)
 
-                Button("Unlock") {
+                Button {
                     Task { await onUnlock() }
+                } label: {
+                    Text("Unlock")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Color.appBackground)
+                        .frame(width: 180, height: 50)
+                        .background(Color.brand, in: Capsule())
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.pressable)
             }
         }
         .ignoresSafeArea()

@@ -77,6 +77,7 @@ struct RulesView: View {
             }
         }
         .navigationTitle("Merchant rules")
+        .themedList()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -137,6 +138,7 @@ struct RuleEditorView: View {
                 }
             }
             .navigationTitle(rule == nil ? "New rule" : "Edit rule")
+            .themedList()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

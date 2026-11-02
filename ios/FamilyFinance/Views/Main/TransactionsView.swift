@@ -2,7 +2,8 @@ import Foundation
 import SwiftUI
 
 // =========================
-// TRANSACTIONS: list grouped by day, search and filters
+// TRANSACTIONS: grouped by day, with search and filters
+// (cards, dates, type, category) and totals for exactly what is shown
 // =========================
 
 struct TransactionsView: View {
@@ -18,7 +19,7 @@ struct TransactionsView: View {
 
         var title: String {
             switch self {
-            case .all: "All"
+            case .all: "All types"
             case .expenses: "Expenses"
             case .income: "Income"
             case .transfers: "Transfers"
@@ -53,7 +54,7 @@ struct TransactionsView: View {
         let text = search.trimmingCharacters(in: .whitespaces).lowercased()
 
         return model.transactions.filter { transaction in
-            guard typeFilter.matches(transaction) else {
+            guard typeFilter.matches(transaction), period.contains(transaction.date) else {
                 return false
             }
 
@@ -65,10 +66,6 @@ struct TransactionsView: View {
                 guard let accountId = transaction.accountId, accountFilter.contains(accountId) else {
                     return false
                 }
-            }
-
-            if !period.contains(transaction.date) {
-                return false
             }
 
             if text.isEmpty {
@@ -85,114 +82,72 @@ struct TransactionsView: View {
     }
 
     private var groups: [DayGroup] {
-        let byDay = Dictionary(grouping: filtered) { $0.date.startOfDay }
-
-        return byDay
+        Dictionary(grouping: filtered) { $0.date.startOfDay }
             .map { DayGroup(day: $0.key, items: $0.value.sorted { $0.date > $1.date }) }
             .sorted { $0.day > $1.day }
     }
 
     private var isFiltering: Bool {
-        typeFilter != .all || categoryFilter != nil
+        typeFilter != .all || categoryFilter != nil || !accountFilter.isEmpty || period.kind != .allTime
     }
 
-    /// Card or dates chosen: show totals for exactly what is on the screen
-    private var showsTotals: Bool {
-        !accountFilter.isEmpty || period.kind != .allTime
-    }
-
-    /// Income and expenses of the filtered list, per currency
-    private var totals: [(currency: String, income: Double, expenses: Double)] {
-        let byCurrency = Dictionary(grouping: filtered.filter { !$0.isTransfer }, by: \.currency)
-
-        return byCurrency
-            .map { currency, items in
-                (
-                    currency: currency,
-                    income: items.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount },
-                    expenses: items.filter { $0.amount < 0 }.reduce(0) { $0 + $1.amount }
-                )
-            }
-            .sorted { $0.currency < $1.currency }
+    /// Main currency of what is on the screen (UAH unless only other cards are chosen)
+    private var currency: String {
+        let currencies = Set(filtered.map(\.currency))
+        return currencies.count == 1 ? currencies.first ?? "UAH" : "UAH"
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                if showsTotals && !totals.isEmpty {
-                    Section("Total for the selection") {
-                        ForEach(totals, id: \.currency) { item in
-                            HStack {
-                                Text(item.currency)
-                                    .font(.subheadline.bold())
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
+                    FilterBar {
+                        if model.accounts.count > 1 {
+                            AccountFilterMenu(accounts: model.accounts, selection: $accountFilter)
+                        }
 
-                                Spacer()
+                        PeriodButton(selection: $period, allowsAllTime: true)
 
-                                AmountText(amount: item.income, currency: item.currency)
+                        typeMenu
 
-                                AmountText(amount: item.expenses, currency: item.currency)
-                                    .padding(.leading, 8)
+                        if isFiltering {
+                            Button {
+                                withAnimation(Motion.spring) {
+                                    resetFilters()
+                                }
+                            } label: {
+                                Chip(title: "Reset", icon: "xmark")
                             }
-                            .font(.subheadline)
+                            .buttonStyle(.pressable)
+                            .transition(.scale.combined(with: .opacity))
                         }
                     }
-                }
+                    .padding(.horizontal, -20)
+                    .appearAnimation(0)
 
-                ForEach(groups) { group in
-                    Section {
-                        ForEach(group.items) { transaction in
-                            NavigationLink(value: transaction) {
-                                TransactionRow(transaction: transaction)
-                            }
-                        }
-                    } header: {
-                        DayHeader(day: group.day, items: group.items)
+                    if !filtered.isEmpty {
+                        totalsCard
+                            .padding(.top, 14)
+                            .appearAnimation(1)
+                    }
+
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                        daySection(group)
+                            .padding(.top, 22)
+                            .appearAnimation(min(index + 2, 8))
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
+                .animation(Motion.spring, value: filtered.map(\.id))
             }
+            .background(Color.appBackground)
+            .scrollIndicators(.hidden)
             .overlay {
-                if groups.isEmpty {
-                    if model.transactions.isEmpty {
-                        ContentUnavailableView(
-                            "No transactions yet",
-                            systemImage: "tray",
-                            description: Text("Connect Monobank in More → Settings and sync.")
-                        )
-                    } else if !search.isEmpty {
-                        ContentUnavailableView.search(text: search)
-                    } else {
-                        ContentUnavailableView(
-                            "Nothing here",
-                            systemImage: "calendar.badge.exclamationmark",
-                            description: Text("No transactions for these cards and dates.")
-                        )
-                    }
-                }
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                FilterBar {
-                    if model.accounts.count > 1 {
-                        AccountFilterMenu(accounts: model.accounts, selection: $accountFilter)
-                    }
-
-                    PeriodButton(selection: $period, allowsAllTime: true)
-
-                    if showsTotals {
-                        Button("Reset", systemImage: "xmark") {
-                            accountFilter = []
-                            period = PeriodSelection(.allTime)
-                        }
-                    }
-                }
-                .background(.bar)
+                emptyState
             }
             .navigationTitle("Transactions")
-            .searchable(text: $search, prompt: "Merchant, description, category")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    filterMenu
-                }
-            }
+            .searchable(text: $search, prompt: "Merchant, category, note")
             .refreshable {
                 await model.refresh()
             }
@@ -202,15 +157,17 @@ struct TransactionsView: View {
         }
     }
 
-    private var filterMenu: some View {
+    // MARK: - Parts
+
+    private var typeMenu: some View {
         Menu {
-            Picker("Type", selection: $typeFilter) {
+            Picker("Type", selection: $typeFilter.animation(Motion.spring)) {
                 ForEach(TypeFilter.allCases) { item in
                     Text(item.title).tag(item)
                 }
             }
 
-            Picker("Category", selection: $categoryFilter) {
+            Picker("Category", selection: $categoryFilter.animation(Motion.spring)) {
                 Text("All categories").tag(String?.none)
 
                 ForEach(model.categories) { category in
@@ -219,31 +176,120 @@ struct TransactionsView: View {
                 }
             }
             .pickerStyle(.menu)
+        } label: {
+            Chip(
+                title: categoryFilter ?? typeFilter.title,
+                icon: "line.3.horizontal.decrease",
+                isOn: typeFilter != .all || categoryFilter != nil,
+                isFilter: true
+            )
+        }
+    }
 
-            if isFiltering {
-                Button("Reset filters", role: .destructive) {
-                    typeFilter = .all
-                    categoryFilter = nil
+    private var totalsCard: some View {
+        let shown = filtered.filter { !$0.isTransfer && $0.currency == currency }
+        let income = shown.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
+        let expenses = shown.filter { $0.amount < 0 }.reduce(0) { $0 + abs($1.amount) }
+
+        return HStack(spacing: 8) {
+            totalItem("In") {
+                MoneyText(amount: income, currency: currency, sign: true, decimals: false)
+                    .foregroundStyle(Color.income)
+            }
+
+            totalItem("Out") {
+                MoneyText(amount: expenses, currency: currency, decimals: false)
+                    .foregroundStyle(Color.textPrimary)
+            }
+
+            totalItem("Operations") {
+                Text("\(filtered.count)")
+                    .foregroundStyle(Color.textPrimary)
+                    .contentTransition(.numericText(value: Double(filtered.count)))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func totalItem<Value: View>(_ title: String, @ViewBuilder value: () -> Value) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.textSecondary)
+
+            value()
+                .font(.system(size: 16, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func daySection(_ group: DayGroup) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            DayHeader(day: group.day, items: group.items)
+
+            VStack(spacing: 0) {
+                ForEach(group.items) { transaction in
+                    NavigationLink(value: transaction) {
+                        TransactionRow(transaction: transaction)
+                    }
+                    .buttonStyle(.pressable)
+
+                    if transaction.id != group.items.last?.id {
+                        Rectangle()
+                            .fill(Color.divider)
+                            .frame(height: 1)
+                            .padding(.leading, 56)
+                    }
                 }
             }
-        } label: {
-            Image(systemName: isFiltering
-                  ? "line.3.horizontal.decrease.circle.fill"
-                  : "line.3.horizontal.decrease.circle")
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
-        .accessibilityLabel("Filters")
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if groups.isEmpty {
+            if model.transactions.isEmpty {
+                ContentUnavailableView(
+                    "No transactions yet",
+                    systemImage: "tray",
+                    description: Text("Connect Monobank in More → Settings and sync.")
+                )
+            } else if !search.isEmpty {
+                ContentUnavailableView.search(text: search)
+            } else {
+                ContentUnavailableView(
+                    "Nothing here",
+                    systemImage: "calendar.badge.exclamationmark",
+                    description: Text("No transactions for these filters.")
+                )
+            }
+        }
+    }
+
+    private func resetFilters() {
+        typeFilter = .all
+        categoryFilter = nil
+        accountFilter = []
+        period = PeriodSelection(.allTime)
     }
 }
 
-/// "Today · −1 250 ₴" above each day
+/// "Today · −₴1,585.40" above each day
 private struct DayHeader: View {
     let day: Date
     let items: [Transaction]
 
-    /// Spent this day in UAH, transfers not counted
-    private var spent: Double {
+    /// Result of the day in UAH, transfers not counted
+    private var total: Double {
         items
-            .filter { !$0.isTransfer && $0.amount < 0 && $0.currency == "UAH" }
+            .filter { !$0.isTransfer && $0.currency == "UAH" }
             .reduce(0) { $0 + $1.amount }
     }
 
@@ -255,23 +301,27 @@ private struct DayHeader: View {
         }
 
         if calendar.isDateInYesterday(day) {
-            return "Yesterday"
+            return "Yesterday · " + day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
         }
 
-        return day.formatted(.dateTime.weekday(.wide).day().month(.wide))
+        return day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 
     var body: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text(title)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color.textPrimary)
 
             Spacer()
 
-            if spent < 0 {
-                Text(spent, format: .currency(code: "UAH"))
-                    .monospacedDigit()
+            if total != 0 {
+                MoneyText(amount: total, currency: "UAH", sign: true)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.textSecondary)
             }
         }
+        .padding(.horizontal, 4)
     }
 }
 

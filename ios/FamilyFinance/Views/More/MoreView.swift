@@ -2,68 +2,91 @@ import Foundation
 import SwiftUI
 
 // =========================
-// MORE: accounts, categories, rules, settings, sign out
+// MORE: profile, Monobank, money settings, security, sign out
 // =========================
 
 struct MoreView: View {
     @Environment(AppModel.self) private var model
     @State private var confirmSignOut = false
+    @State private var confirmLogoutAll = false
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.system(size: 44))
-                            .foregroundStyle(.tint)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    profileCard
+                        .appearAnimation(0)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(model.user?.email ?? "")
-                                .font(.headline)
+                    monobankCard
+                        .appearAnimation(1)
 
-                            Text(modeTitle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                    group("Money", index: 2) {
+                        linkRow("Accounts", value: "\(model.accounts.count)", icon: "creditcard.fill", color: .brand) {
+                            AccountsView()
+                        }
+
+                        linkRow("Categories", value: "\(model.categories.count)", icon: "square.grid.2x2.fill", color: Color(hex: 0xFB923C)) {
+                            CategoriesView()
+                        }
+
+                        linkRow("Merchant rules", value: "\(model.rules.count)", icon: "wand.and.stars", color: .income) {
+                            RulesView()
+                        }
+
+                        linkRow("Bank, markers & data", value: "", icon: "gearshape.fill", color: Color(hex: 0x22D3EE), isLast: true) {
+                            SettingsView()
                         }
                     }
-                    .padding(.vertical, 4)
-                }
 
-                Section {
-                    NavigationLink {
-                        AccountsView()
-                    } label: {
-                        Label("Accounts", systemImage: "creditcard.fill")
+                    group("Security", index: 3) {
+                        rowShell(icon: "faceid", color: Color(hex: 0x60A5FA), isLast: model.isDemo) {
+                            FaceIDToggle()
+                                .labelStyle(.titleOnly)
+                        }
+
+                        if !model.isDemo {
+                            linkRow("Change password", value: "", icon: "key.fill", color: .warning) {
+                                ChangePasswordView()
+                            }
+                            .disabled(model.isReadOnly)
+
+                            linkRow("Security log", value: "", icon: "list.bullet.clipboard.fill", color: Color(hex: 0xF472B6)) {
+                                SecurityLogView()
+                            }
+
+                            Button {
+                                confirmLogoutAll = true
+                            } label: {
+                                rowShell(icon: "rectangle.portrait.and.arrow.right", color: .transfer, isLast: true) {
+                                    Text("Sign out on all devices")
+                                        .foregroundStyle(Color.textPrimary)
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(.pressable)
+                        }
                     }
 
-                    NavigationLink {
-                        CategoriesView()
-                    } label: {
-                        Label("Categories", systemImage: "square.grid.2x2.fill")
-                    }
-
-                    NavigationLink {
-                        RulesView()
-                    } label: {
-                        Label("Merchant rules", systemImage: "wand.and.stars")
-                    }
-                }
-
-                Section {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Label("Settings", systemImage: "gearshape.fill")
-                    }
-                }
-
-                Section {
-                    Button(model.isDemo ? "Exit demo" : "Sign out", role: .destructive) {
+                    Button {
                         confirmSignOut = true
+                    } label: {
+                        Text(model.isDemo ? "Exit demo" : "Sign out")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.danger)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.cardBackground, in: Capsule())
+                            .overlay(Capsule().strokeBorder(Color.line, lineWidth: 1))
                     }
+                    .buttonStyle(.pressable)
+                    .padding(.top, 10)
+                    .appearAnimation(4)
                 }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
             }
+            .background(Color.appBackground)
+            .scrollIndicators(.hidden)
             .navigationTitle("More")
             .confirmationDialog(
                 model.isDemo ? "Exit demo mode?" : "Sign out?",
@@ -74,7 +97,170 @@ struct MoreView: View {
                     Task { await model.signOut() }
                 }
             }
+            .confirmationDialog("Sign out on all devices?", isPresented: $confirmLogoutAll, titleVisibility: .visible) {
+                Button("Sign out everywhere", role: .destructive) {
+                    Task { await model.logoutEverywhere() }
+                }
+            } message: {
+                Text("Every phone and browser where you are signed in will need the password again.")
+            }
         }
+    }
+
+    // MARK: - Parts
+
+    private var profileCard: some View {
+        HStack(spacing: 14) {
+            Text(String(model.user?.email.prefix(1).uppercased() ?? "?"))
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(CardStyle.brandGradient, in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.user?.email ?? "")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.textPrimary)
+                    .lineLimit(1)
+
+                Text(modeTitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.textSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var monobankCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Text("mono")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(Color.appBackground)
+                    .frame(width: 40, height: 40)
+                    .background(Color.textPrimary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Monobank")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.textPrimary)
+
+                    Text(model.bankConnected ? "● Connected" : "Not connected")
+                        .font(.system(size: 13))
+                        .foregroundStyle(model.bankConnected ? Color.income : Color.textSecondary)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    Task { await model.sync() }
+                } label: {
+                    HStack(spacing: 8) {
+                        if model.isSyncing {
+                            ProgressView()
+                                .tint(Color.appBackground)
+                        }
+
+                        Text(model.isSyncing ? "Syncing…" : "Sync now")
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color.appBackground)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 42)
+                    .background(Color.brand, in: Capsule())
+                }
+                .buttonStyle(.pressable)
+                .disabled(!model.bankConnected || model.isSyncing || model.isReadOnly)
+                .opacity(model.bankConnected ? 1 : 0.5)
+
+                NavigationLink {
+                    SettingsView()
+                } label: {
+                    Text(model.bankConnected ? "Replace token" : "Connect")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.textPrimary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(Color.raised, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.line, lineWidth: 1))
+                }
+                .buttonStyle(.pressable)
+            }
+        }
+        .padding(16)
+        .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .animation(Motion.spring, value: model.isSyncing)
+    }
+
+    private func group<Content: View>(_ title: String, index: Int, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(Color.textSecondary)
+                .padding(.leading, 4)
+
+            VStack(spacing: 0) {
+                content()
+            }
+            .padding(.horizontal, 14)
+            .background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .padding(.top, 10)
+        .appearAnimation(index)
+    }
+
+    private func rowShell<Content: View>(icon: String, color: Color, isLast: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 32, height: 32)
+                .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            content()
+        }
+        .font(.system(size: 15, weight: .medium))
+        .foregroundStyle(Color.textPrimary)
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) {
+            if !isLast {
+                Rectangle().fill(Color.divider).frame(height: 1).padding(.leading, 44)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func linkRow<Destination: View>(
+        _ title: String,
+        value: String,
+        icon: String,
+        color: Color,
+        isLast: Bool = false,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            rowShell(icon: icon, color: color, isLast: isLast) {
+                Text(title)
+
+                Spacer()
+
+                Text(value)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.textSecondary)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.textFaint)
+            }
+        }
+        .buttonStyle(.pressable)
     }
 
     private var modeTitle: String {
@@ -127,7 +313,7 @@ struct AccountsView: View {
                     ForEach(model.accounts) { account in
                         HStack(spacing: 12) {
                             RoundedRectangle(cornerRadius: 6)
-                                .fill(CardStyle.gradient(for: account.currency))
+                                .fill(CardStyle.gradient(for: account))
                                 .frame(width: 44, height: 30)
 
                             VStack(alignment: .leading) {
@@ -150,6 +336,7 @@ struct AccountsView: View {
             }
         }
         .navigationTitle("Accounts")
+        .themedList()
         .refreshable {
             await model.refresh()
         }
@@ -228,6 +415,7 @@ struct CategoriesView: View {
             }
         }
         .navigationTitle("Categories")
+        .themedList()
         .task(id: "\(period.rawValue)-\(model.dataVersion)") {
             do {
                 report = try await model.service.expenseReport(days: period.days)

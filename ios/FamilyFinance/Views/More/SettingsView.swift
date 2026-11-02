@@ -9,7 +9,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
-    @AppStorage("faceIDEnabled") private var faceIDEnabled = false
 
     @State private var settings: UserSettings?
     @State private var token = ""
@@ -33,7 +32,8 @@ struct SettingsView: View {
             securitySection
             dataSection
         }
-        .navigationTitle("Settings")
+        .navigationTitle("Bank & settings")
+        .themedList()
         .task(id: model.dataVersion) {
             await load()
         }
@@ -75,7 +75,7 @@ struct SettingsView: View {
                     model.bankConnected ? "Connected" : "Not connected",
                     systemImage: model.bankConnected ? "checkmark.circle.fill" : "xmark.circle"
                 )
-                .foregroundStyle(model.bankConnected ? Color.income : .secondary)
+                .foregroundStyle(model.bankConnected ? Color.income : Color.textSecondary)
             }
 
             SecureField(model.bankConnected ? "New token (to replace)" : "Token from api.monobank.ua", text: $token)
@@ -149,9 +149,7 @@ struct SettingsView: View {
 
     private var securitySection: some View {
         Section("Security") {
-            Toggle(isOn: faceIDBinding) {
-                Label("Lock with Face ID", systemImage: "faceid")
-            }
+            FaceIDToggle()
 
             if !model.isDemo {
                 NavigationLink {
@@ -203,7 +201,7 @@ struct SettingsView: View {
                     DeleteAccountView()
                 } label: {
                     Label("Delete account", systemImage: "trash")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.danger)
                 }
                 .disabled(!canEdit)
             }
@@ -215,25 +213,6 @@ struct SettingsView: View {
     }
 
     // MARK: - Logic
-
-    /// Face ID is asked once when turning the lock on, so you can't lock yourself out
-    private var faceIDBinding: Binding<Bool> {
-        Binding(
-            get: { faceIDEnabled },
-            set: { isOn in
-                if !isOn {
-                    faceIDEnabled = false
-                    return
-                }
-
-                Task {
-                    if await BiometricAuth.authenticate(reason: "Turn on the Face ID lock") {
-                        faceIDEnabled = true
-                    }
-                }
-            }
-        )
-    }
 
     private func load() async {
         do {
@@ -296,7 +275,7 @@ struct ChangePasswordView: View {
             if let errorMessage {
                 Section {
                     Text(errorMessage)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.danger)
                 }
             }
 
@@ -308,6 +287,7 @@ struct ChangePasswordView: View {
             }
         }
         .navigationTitle("Password")
+        .themedList()
     }
 
     private func save() async {
@@ -348,7 +328,7 @@ struct SecurityLogView: View {
             ForEach(events) { event in
                 HStack(spacing: 12) {
                     Image(systemName: event.isWarning ? "exclamationmark.triangle.fill" : "checkmark.shield.fill")
-                        .foregroundStyle(event.isWarning ? Color.orange : Color.income)
+                        .foregroundStyle(event.isWarning ? Color.warning : Color.income)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(event.title)
@@ -372,6 +352,7 @@ struct SecurityLogView: View {
             }
         }
         .navigationTitle("Security log")
+        .themedList()
         .task {
             do {
                 events = try await model.service.securityLog()
@@ -402,7 +383,7 @@ struct DeleteAccountView: View {
         Form {
             Section {
                 Label("This deletes your account, all transactions, rules and the Monobank token. It can't be undone.", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.danger)
             }
 
             Section {
@@ -419,7 +400,7 @@ struct DeleteAccountView: View {
             if let errorMessage {
                 Section {
                     Text(errorMessage)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.danger)
                 }
             }
 
@@ -431,6 +412,7 @@ struct DeleteAccountView: View {
             }
         }
         .navigationTitle("Delete account")
+        .themedList()
     }
 
     private func delete() async {
@@ -451,4 +433,35 @@ struct DeleteAccountView: View {
         SettingsView()
     }
     .environment(AppModel.preview)
+}
+
+/// Face ID lock switch. Face ID is asked once when turning it on,
+/// so you can't lock yourself out.
+struct FaceIDToggle: View {
+    @AppStorage("faceIDEnabled") private var faceIDEnabled = false
+
+    var body: some View {
+        Toggle(isOn: binding) {
+            Label("Lock with Face ID", systemImage: "faceid")
+        }
+        .tint(Color.brand)
+    }
+
+    private var binding: Binding<Bool> {
+        Binding(
+            get: { faceIDEnabled },
+            set: { isOn in
+                if !isOn {
+                    faceIDEnabled = false
+                    return
+                }
+
+                Task {
+                    if await BiometricAuth.authenticate(reason: "Turn on the Face ID lock") {
+                        faceIDEnabled = true
+                    }
+                }
+            }
+        )
+    }
 }

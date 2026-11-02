@@ -14,6 +14,9 @@ struct MyApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                // The design is dark-only: a calm dark screen for money
+                .preferredColorScheme(.dark)
+                .tint(Color.brand)
         }
     }
 }

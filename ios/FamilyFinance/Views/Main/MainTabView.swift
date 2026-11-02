@@ -24,6 +24,7 @@ struct MainTabView: View {
                 MoreView()
             }
         }
+        .tint(Color.brand)
     }
 }
 
