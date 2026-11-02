@@ -1,0 +1,35 @@
+# CodeQL: GitHub's free code scanner. It reads the backend, frontend and
+# workflow code and looks for security bugs (SQL injection, XSS, unsafe
+# redirects, leaked secrets in logs...). Findings appear in the repository's
+# Security tab. Runs on every push to master, every pull request and weekly.
+name: CodeQL
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: '23 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
