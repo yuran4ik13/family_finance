@@ -14,12 +14,23 @@ export const API_URL =
 
 export const UNAUTHORIZED_EVENT = 'ff:unauthorized';
 
+// CSRF protection: the backend accepts changes only with this header.
+// Other websites can't add it to requests to our API.
+const CSRF_HEADERS = { 'X-Requested-With': 'family-finance' };
+
 export async function apiFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  const headers = new Headers(init.headers);
+
+  for (const [name, value] of Object.entries(CSRF_HEADERS)) {
+    headers.set(name, value);
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
+    headers,
     credentials: 'include',
   });
 
@@ -67,7 +78,7 @@ export async function register(
   const response = await fetch(`${API_URL}/api/auth/register`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...CSRF_HEADERS },
     body: JSON.stringify({ email, password }),
   });
 
@@ -101,7 +112,7 @@ export async function login(
   const response = await fetch(`${API_URL}/api/auth/login`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...CSRF_HEADERS },
     body: JSON.stringify({ email, password }),
   });
 
@@ -116,6 +127,7 @@ export async function logout(): Promise<void> {
   await fetch(`${API_URL}/api/auth/logout`, {
     method: 'POST',
     credentials: 'include',
+    headers: CSRF_HEADERS,
   });
 }
 
