@@ -15,6 +15,13 @@ import { config } from './config';
 // Everything that protects the API before a request reaches the routes.
 // =========================
 
+// Our own apps (website, iPhone app) add this header to every request.
+// A malicious website can't: a browser only sends a custom header to
+// another site after asking the server first (CORS preflight), and our
+// CORS rule allows only our own frontend.
+export const CSRF_HEADER = 'X-Requested-With';
+export const CSRF_HEADER_VALUE = 'family-finance';
+
 export function applySecurityMiddleware(app: Express): void {
   // Hide "X-Powered-By: Express" (don't advertise what we run)
   app.disable('x-powered-by');
@@ -50,12 +57,12 @@ export function applySecurityMiddleware(app: Express): void {
       origin: config.frontendOrigins,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type'],
+      allowedHeaders: ['Content-Type', CSRF_HEADER],
       maxAge: 600,
     }),
   );
 
-  app.use(rejectForeignOrigins);
+  app.use(csrfProtection);
 
   // General limit for the whole API: 300 requests / 15 min per IP
   app.use(
@@ -82,23 +89,32 @@ export function applySecurityMiddleware(app: Express): void {
   );
 }
 
-// CSRF protection: a request that changes data and comes from a browser
-// must come from our own frontend. Browsers always send the Origin
-// header on such requests and a malicious site can't fake it.
-function rejectForeignOrigins(
+// CSRF protection. Three layers, each one enough on its own:
+//   1. the login cookie is SameSite=Strict: browsers don't send it
+//      with requests started by other sites
+//   2. Origin check: a request that changes data and comes from a
+//      browser must come from our own frontend
+//   3. custom header: every request that changes data must carry
+//      X-Requested-With: family-finance, which other sites can't add
+export function csrfProtection(
   req: Request,
   res: Response,
   next: NextFunction,
 ) {
   const isReadOnlyMethod = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+
+  if (isReadOnlyMethod) {
+    return next();
+  }
+
   const origin = req.get('origin');
 
-  if (
-    !isReadOnlyMethod &&
-    origin !== undefined &&
-    !config.frontendOrigins.includes(origin)
-  ) {
+  if (origin !== undefined && !config.frontendOrigins.includes(origin)) {
     return res.status(403).json({ message: 'Forbidden origin' });
+  }
+
+  if (req.get(CSRF_HEADER) !== CSRF_HEADER_VALUE) {
+    return res.status(403).json({ message: 'Missing CSRF header' });
   }
 
   return next();
