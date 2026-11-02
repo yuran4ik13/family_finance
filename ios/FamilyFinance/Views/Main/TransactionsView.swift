@@ -46,6 +46,8 @@ struct TransactionsView: View {
     @State private var search = ""
     @State private var typeFilter: TypeFilter = .all
     @State private var categoryFilter: String?
+    @State private var accountFilter: Set<Int> = []
+    @State private var period = PeriodSelection(.allTime)
 
     private var filtered: [Transaction] {
         let text = search.trimmingCharacters(in: .whitespaces).lowercased()
@@ -56,6 +58,16 @@ struct TransactionsView: View {
             }
 
             if let categoryFilter, (transaction.categoryName ?? "Other") != categoryFilter {
+                return false
+            }
+
+            if !accountFilter.isEmpty {
+                guard let accountId = transaction.accountId, accountFilter.contains(accountId) else {
+                    return false
+                }
+            }
+
+            if !period.contains(transaction.date) {
                 return false
             }
 
@@ -84,9 +96,48 @@ struct TransactionsView: View {
         typeFilter != .all || categoryFilter != nil
     }
 
+    /// Card or dates chosen: show totals for exactly what is on the screen
+    private var showsTotals: Bool {
+        !accountFilter.isEmpty || period.kind != .allTime
+    }
+
+    /// Income and expenses of the filtered list, per currency
+    private var totals: [(currency: String, income: Double, expenses: Double)] {
+        let byCurrency = Dictionary(grouping: filtered.filter { !$0.isTransfer }, by: \.currency)
+
+        return byCurrency
+            .map { currency, items in
+                (
+                    currency: currency,
+                    income: items.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount },
+                    expenses: items.filter { $0.amount < 0 }.reduce(0) { $0 + $1.amount }
+                )
+            }
+            .sorted { $0.currency < $1.currency }
+    }
+
     var body: some View {
         NavigationStack {
             List {
+                if showsTotals && !totals.isEmpty {
+                    Section("Total for the selection") {
+                        ForEach(totals, id: \.currency) { item in
+                            HStack {
+                                Text(item.currency)
+                                    .font(.subheadline.bold())
+
+                                Spacer()
+
+                                AmountText(amount: item.income, currency: item.currency)
+
+                                AmountText(amount: item.expenses, currency: item.currency)
+                                    .padding(.leading, 8)
+                            }
+                            .font(.subheadline)
+                        }
+                    }
+                }
+
                 ForEach(groups) { group in
                     Section {
                         ForEach(group.items) { transaction in
@@ -107,10 +158,33 @@ struct TransactionsView: View {
                             systemImage: "tray",
                             description: Text("Connect Monobank in More → Settings and sync.")
                         )
-                    } else {
+                    } else if !search.isEmpty {
                         ContentUnavailableView.search(text: search)
+                    } else {
+                        ContentUnavailableView(
+                            "Nothing here",
+                            systemImage: "calendar.badge.exclamationmark",
+                            description: Text("No transactions for these cards and dates.")
+                        )
                     }
                 }
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                FilterBar {
+                    if model.accounts.count > 1 {
+                        AccountFilterMenu(accounts: model.accounts, selection: $accountFilter)
+                    }
+
+                    PeriodButton(selection: $period, allowsAllTime: true)
+
+                    if showsTotals {
+                        Button("Reset", systemImage: "xmark") {
+                            accountFilter = []
+                            period = PeriodSelection(.allTime)
+                        }
+                    }
+                }
+                .background(.bar)
             }
             .navigationTitle("Transactions")
             .searchable(text: $search, prompt: "Merchant, description, category")

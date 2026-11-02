@@ -133,6 +133,8 @@ struct AnalyticsQuery: Hashable {
     var currency: String = "UAH"
     var type: AnalyticsType = .all
     var includeTransfers = false
+    /// Empty = all cards
+    var accountIds: [Int] = []
 }
 
 /// GET /api/reports/analytics

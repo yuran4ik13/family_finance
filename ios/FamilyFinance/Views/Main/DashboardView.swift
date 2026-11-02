@@ -8,17 +8,52 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
     @State private var period: SummaryPeriod = .month
-    @State private var expenses: ExpenseReport?
+    @State private var serverExpenses: ExpenseReport?
+    /// nil = all cards. Tap a card to see only it, tap again for all.
+    @State private var selectedAccountId: Int?
 
-    private let mainCurrency = "UAH"
+    private var selectedAccount: AccountSummary? {
+        model.accounts.first { $0.id == selectedAccountId }
+    }
+
+    private var mainCurrency: String {
+        selectedAccount?.currency ?? "UAH"
+    }
+
+    /// Transactions of the chosen card (or all)
+    private var visibleTransactions: [Transaction] {
+        guard let selectedAccountId else {
+            return model.transactions
+        }
+
+        return model.transactions.filter { $0.accountId == selectedAccountId }
+    }
+
+    /// All cards: numbers from the server. One card: counted in the app
+    /// from its transactions, with the same rules as the server.
+    private var summary: SummaryReport? {
+        if selectedAccountId == nil {
+            return model.summary
+        }
+
+        return ReportBuilder.summary(visibleTransactions)
+    }
+
+    private var expenses: ExpenseReport? {
+        if selectedAccountId == nil {
+            return serverExpenses
+        }
+
+        return ReportBuilder.expenseReport(visibleTransactions, days: period.days, currency: mainCurrency)
+    }
 
     private var totals: CurrencyTotals {
-        model.summary?.totals(for: period)[mainCurrency] ?? CurrencyTotals()
+        summary?.totals(for: period)[mainCurrency] ?? CurrencyTotals()
     }
 
     /// Other currencies that had movement in this period
     private var otherCurrencies: [String] {
-        let all = model.summary?.totals(for: period) ?? [:]
+        let all = summary?.totals(for: period) ?? [:]
         return all.keys.filter { $0 != mainCurrency }.sorted()
     }
 
@@ -33,7 +68,7 @@ struct DashboardView: View {
     }
 
     private var recent: [Transaction] {
-        Array(model.transactions.prefix(5))
+        Array(visibleTransactions.prefix(5))
     }
 
     var body: some View {
@@ -99,14 +134,54 @@ struct DashboardView: View {
                 .foregroundStyle(.secondary)
             }
         } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(model.accounts) { account in
-                        AccountCard(account: account)
+            VStack(alignment: .leading, spacing: 8) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(model.accounts) { account in
+                            let isSelected = selectedAccountId == account.id
+
+                            Button {
+                                withAnimation(.snappy) {
+                                    selectedAccountId = isSelected ? nil : account.id
+                                }
+                            } label: {
+                                AccountCard(account: account)
+                                    .overlay {
+                                        if isSelected {
+                                            RoundedRectangle(cornerRadius: 20)
+                                                .strokeBorder(.white, lineWidth: 3)
+                                        }
+                                    }
+                                    .opacity(selectedAccountId == nil || isSelected ? 1 : 0.45)
+                                    .scaleEffect(isSelected ? 1.0 : 0.97)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .scrollClipDisabled()
+
+                HStack {
+                    if let selectedAccount {
+                        Label("Only \(selectedAccount.name)", systemImage: "line.3.horizontal.decrease.circle.fill")
+                            .foregroundStyle(.tint)
+
+                        Spacer()
+
+                        Button("Show all") {
+                            withAnimation(.snappy) {
+                                selectedAccountId = nil
+                            }
+                        }
+                    } else if model.accounts.count > 1 {
+                        Text("Tap a card to see only its numbers")
+                            .foregroundStyle(.secondary)
                     }
                 }
+                .font(.footnote)
             }
-            .scrollClipDisabled()
         }
     }
 
@@ -230,7 +305,7 @@ struct DashboardView: View {
 
     private func loadExpenses() async {
         do {
-            expenses = try await model.service.expenseReport(days: period.days)
+            serverExpenses = try await model.service.expenseReport(days: period.days)
         } catch {
             model.handle(error)
         }

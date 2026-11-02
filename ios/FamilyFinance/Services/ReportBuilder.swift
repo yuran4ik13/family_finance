@@ -21,7 +21,7 @@ enum ReportBuilder {
 
     // MARK: - Expenses by category (GET /api/reports/expenses)
 
-    static func expenseReport(_ transactions: [Transaction], days: Int) -> ExpenseReport {
+    static func expenseReport(_ transactions: [Transaction], days: Int, currency: String = "UAH") -> ExpenseReport {
         let from = startOfPeriod(days: days)
         var byCategory: [String: Double] = [:]
         var total = 0.0
@@ -29,6 +29,7 @@ enum ReportBuilder {
         for transaction in transactions {
             guard
                 transaction.type == .expense,
+                transaction.currency == currency,
                 transaction.date >= from,
                 transaction.categoryName != "Money Transfer"
             else {
@@ -41,7 +42,7 @@ enum ReportBuilder {
         }
 
         return ExpenseReport(
-            currency: "UAH",
+            currency: currency,
             days: days,
             total: round2(total),
             byCategory: byCategory.mapValues { round2($0) }
@@ -110,6 +111,12 @@ enum ReportBuilder {
                     transaction.currency == query.currency
                 else {
                     return false
+                }
+
+                if !query.accountIds.isEmpty {
+                    guard let accountId = transaction.accountId, query.accountIds.contains(accountId) else {
+                        return false
+                    }
                 }
 
                 if query.type != .all && transaction.type.rawValue != query.type.rawValue {

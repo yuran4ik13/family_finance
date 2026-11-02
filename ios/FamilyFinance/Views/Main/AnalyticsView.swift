@@ -10,7 +10,8 @@ import SwiftUI
 struct AnalyticsView: View {
     @Environment(AppModel.self) private var model
 
-    @State private var preset: AnalyticsPreset = .month
+    @State private var period = PeriodSelection(.preset(.month))
+    @State private var accountFilter: Set<Int> = []
     @State private var currency = "UAH"
     @State private var type: AnalyticsType = .all
     @State private var includeTransfers = false
@@ -20,6 +21,12 @@ struct AnalyticsView: View {
 
     private let currencies = ["UAH", "EUR", "USD"]
 
+    /// Only cards in the chosen currency can be picked (amounts in
+    /// different currencies are never mixed)
+    private var accountsInCurrency: [AccountSummary] {
+        model.accounts.filter { $0.currency == currency }
+    }
+
     /// Everything that should reload the report when it changes
     private struct Key: Hashable {
         var query: AnalyticsQuery
@@ -27,14 +34,15 @@ struct AnalyticsView: View {
     }
 
     private var query: AnalyticsQuery {
-        let range = preset.range()
+        let range = period.range ?? AnalyticsPreset.month.range()
 
         return AnalyticsQuery(
             from: range.from,
             to: range.to,
             currency: currency,
             type: type,
-            includeTransfers: includeTransfers
+            includeTransfers: includeTransfers,
+            accountIds: accountFilter.sorted()
         )
     }
 
@@ -58,19 +66,21 @@ struct AnalyticsView: View {
                 .padding()
             }
             .background(Color.appBackground)
-            .navigationTitle("Analytics")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Picker("Period", selection: $preset) {
-                            ForEach(AnalyticsPreset.allCases) { item in
-                                Text(item.title).tag(item)
-                            }
-                        }
-                    } label: {
-                        Label(preset.title, systemImage: "calendar")
-                            .labelStyle(.titleAndIcon)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                FilterBar {
+                    PeriodButton(selection: $period)
+
+                    if accountsInCurrency.count > 1 {
+                        AccountFilterMenu(accounts: accountsInCurrency, selection: $accountFilter)
                     }
+                }
+                .background(.bar)
+            }
+            .navigationTitle("Analytics")
+            .onChange(of: currency) {
+                // Cards from another currency don't apply any more
+                accountFilter = accountFilter.filter { id in
+                    accountsInCurrency.contains { $0.id == id }
                 }
             }
             .refreshable {

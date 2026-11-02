@@ -304,16 +304,22 @@ final class APIClient: FinanceService {
     }
 
     func analytics(_ query: AnalyticsQuery) async throws -> AnalyticsReport {
-        try await get(
-            "api/reports/analytics",
-            query: [
-                URLQueryItem(name: "from", value: query.from.dayKey),
-                URLQueryItem(name: "to", value: query.to.dayKey),
-                URLQueryItem(name: "currency", value: query.currency),
-                URLQueryItem(name: "type", value: query.type.rawValue),
-                URLQueryItem(name: "includeTransfers", value: query.includeTransfers ? "true" : "false"),
-            ]
-        )
+        var items = [
+            URLQueryItem(name: "from", value: query.from.dayKey),
+            URLQueryItem(name: "to", value: query.to.dayKey),
+            URLQueryItem(name: "currency", value: query.currency),
+            URLQueryItem(name: "type", value: query.type.rawValue),
+            URLQueryItem(name: "includeTransfers", value: query.includeTransfers ? "true" : "false"),
+        ]
+
+        if !query.accountIds.isEmpty {
+            items.append(URLQueryItem(
+                name: "accountIds",
+                value: query.accountIds.map(String.init).joined(separator: ",")
+            ))
+        }
+
+        return try await get("api/reports/analytics", query: items)
     }
 
     // MARK: - Bank

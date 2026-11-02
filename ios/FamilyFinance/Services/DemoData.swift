@@ -80,14 +80,28 @@ enum DemoData {
             AccountSummary(id: 1, name: "Monobank Black UAH", accountType: "black", currency: "UAH", balance: 48250.40, bankName: "Monobank"),
             AccountSummary(id: 2, name: "Monobank Black EUR", accountType: "black", currency: "EUR", balance: 1320.75, bankName: "Monobank"),
             AccountSummary(id: 3, name: "Monobank Black USD", accountType: "black", currency: "USD", balance: 860.00, bankName: "Monobank"),
+            AccountSummary(id: 4, name: "Monobank White UAH", accountType: "white", currency: "UAH", balance: 3150.20, bankName: "Monobank"),
         ]
 
         var random = SeededRandom()
         var transactions: [Transaction] = []
         var nextId = 1
 
+        /// Main card for each currency. Some everyday UAH spending goes to
+        /// the second (White) card, so choosing a card shows different numbers.
+        func accountId(currency: String, category: String) -> Int {
+            switch currency {
+            case "EUR": return 2
+            case "USD": return 3
+            default:
+                let everyday = ["Groceries", "Cafes & Restaurants", "Transport", "Entertainment"]
+                return everyday.contains(category) && random.next() < 0.3 ? 4 : 1
+            }
+        }
+
         func add(_ amount: Double, _ merchant: String, _ category: String, currency: String = "UAH", daysAgo: Int, hour: Int) {
             let minute = Int(random.next() * 60)
+            let account = accountId(currency: currency, category: category)
 
             transactions.append(Transaction(
                 id: nextId,
@@ -97,7 +111,8 @@ enum DemoData {
                 merchant: merchant,
                 type: amount >= 0 ? .income : .expense,
                 date: .daysAgo(daysAgo, hour: hour, minute: minute),
-                categoryName: category
+                categoryName: category,
+                accountId: account
             ))
 
             nextId += 1

@@ -194,10 +194,11 @@ final class DemoService: FinanceService {
             merchant: "Aroma Kava",
             type: .expense,
             date: .now,
-            categoryName: "Cafes & Restaurants"
+            categoryName: "Cafes & Restaurants",
+            accountId: 1
         ), at: 0)
 
-        if let index = accountsStore.firstIndex(where: { $0.currency == "UAH" }) {
+        if let index = accountsStore.firstIndex(where: { $0.id == 1 }) {
             accountsStore[index].balance -= 85
         }
 

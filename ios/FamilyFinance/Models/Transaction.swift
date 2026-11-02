@@ -23,6 +23,8 @@ struct Transaction: Identifiable, Hashable {
     var date: Date
     var categoryName: String?
     var categorySource: CategorySource = .auto
+    /// Which card the operation belongs to (nil if the server is older)
+    var accountId: Int? = nil
 
     /// What to show as the name: merchant, or description, or "Unknown"
     var title: String {
@@ -40,7 +42,7 @@ struct Transaction: Identifiable, Hashable {
 // `Transaction(id:amount:...)` initializer that the demo data uses.
 extension Transaction: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case id, amount, currency, description, merchant, type, date, category, categorySource
+        case id, accountId, amount, currency, description, merchant, type, date, category, categorySource
     }
 
     /// The backend sends the category as an object: { "name": "Groceries" }
@@ -61,5 +63,6 @@ extension Transaction: Decodable {
         date = try container.decode(Date.self, forKey: .date)
         categoryName = try container.decodeIfPresent(CategoryRef.self, forKey: .category)?.name
         categorySource = (try? container.decode(CategorySource.self, forKey: .categorySource)) ?? .auto
+        accountId = try container.decodeIfPresent(Int.self, forKey: .accountId)
     }
 }
