@@ -188,7 +188,7 @@ DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/family_finance_test" npm
 - **CSRF protection**, strict CORS, **security headers** (Helmet), Zod input validation, 100 KB body limit
 - Errors never leak stack traces; the server refuses to start with missing or weak secrets
 - **Read-only demo role** can't change data or trigger bank syncs
-- **Dependabot**, secret scanning and CI (`npm audit`, type checks, security tests)
+- **Dependabot**, secret scanning, **CodeQL** code scanning and CI (`npm audit` on every push, type checks, security tests)
 
 **Honest limits:** the server has to see transactions to build reports, so whoever controls the server and its `.env` can technically read the data. That's true for almost every finance app; it's limited here by encryption of tokens, the access log and the law (GDPR).
 
