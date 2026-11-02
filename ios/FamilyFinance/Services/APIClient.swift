@@ -57,6 +57,8 @@ final class APIClient: FinanceService {
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // CSRF protection: the backend accepts changes only with this header
+        request.setValue("family-finance", forHTTPHeaderField: "X-Requested-With")
 
         if let json {
             request.httpBody = try JSONSerialization.data(withJSONObject: json)
