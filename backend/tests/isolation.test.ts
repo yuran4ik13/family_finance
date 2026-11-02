@@ -39,6 +39,7 @@ function client(cookie = ''): Client {
       const response = await fetch(`${baseUrl}${path}`, {
         method,
         headers: {
+          'X-Requested-With': 'family-finance',
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(self.cookie ? { Cookie: self.cookie } : {}),
         },
@@ -474,5 +475,44 @@ describe('accounts and passwords', () => {
 
     assert.equal(await prisma.transaction.count({ where: { userId: aliceId } }), 1);
     assert.equal((await bob.request('GET', '/api/auth/me')).status, 401);
+  });
+});
+
+describe('CSRF protection', () => {
+  async function rawPost(path: string, headers: Record<string, string>) {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: alice.cookie,
+        ...headers,
+      },
+      body: JSON.stringify({}),
+    });
+
+    return response.status;
+  }
+
+  test('changing data without the CSRF header -> 403', async () => {
+    assert.equal(await rawPost('/api/transactions/recategorize', {}), 403);
+    assert.equal(await rawPost('/api/auth/logout-all', {}), 403);
+  });
+
+  test('changing data from a foreign website -> 403', async () => {
+    const status = await rawPost('/api/transactions/recategorize', {
+      'X-Requested-With': 'family-finance',
+      Origin: 'https://evil.example',
+    });
+
+    assert.equal(status, 403);
+  });
+
+  test('our own frontend with the header is allowed', async () => {
+    const status = await rawPost('/api/transactions/recategorize', {
+      'X-Requested-With': 'family-finance',
+      Origin: config.frontendOrigins[0] ?? '',
+    });
+
+    assert.equal(status, 200);
   });
 });
