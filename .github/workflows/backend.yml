@@ -1,12 +1,13 @@
-# Runs on every push and pull request: type checks, lint, build,
-# security tests (users can't see each other's data) and a security
-# audit of production dependencies.
-name: CI
+# Server: type checks, security tests (users can't see each other's data) and npm audit.
+# Runs only when files in backend/ (or this workflow) change.
+name: Backend
 
 on:
   push:
     branches: [master]
+    paths: ['backend/**', '.github/workflows/backend.yml']
   pull_request:
+    paths: ['backend/**', '.github/workflows/backend.yml']
 
 permissions:
   contents: read
@@ -58,22 +59,4 @@ jobs:
       # Production packages: fail on any known vulnerability
       - run: npm audit --omit=dev --audit-level=moderate
       # Dev tools too (they run on your computer and in CI)
-      - run: npm audit --audit-level=high
-
-  frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-      - run: npm audit --omit=dev --audit-level=moderate
       - run: npm audit --audit-level=high

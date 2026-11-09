@@ -1,0 +1,32 @@
+# Website: lint, build and npm audit.
+# Runs only when files in frontend/ (or this workflow) change.
+name: Website
+
+on:
+  push:
+    branches: [master]
+    paths: ['frontend/**', '.github/workflows/web.yml']
+  pull_request:
+    paths: ['frontend/**', '.github/workflows/web.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=moderate
+      - run: npm audit --audit-level=high

@@ -1,75 +1,40 @@
-# React + TypeScript + Vite
+# Family Finance · Website
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The web version: dashboard, transactions, analytics, settings.
+React 19 + TypeScript + Vite + Recharts. It talks only to the [backend](../backend) API.
 
-Currently, two official plugins are available:
+## Run it locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Start the backend first, then in a new terminal:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+cd frontend
+npm ci
+npm run dev        # http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The API address comes from `VITE_API_URL` in `frontend/.env`
+(default `http://localhost:3000`). The backend must list the website address
+in its `FRONTEND_ORIGIN`, otherwise CORS blocks the requests.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Useful commands
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Command | What it does |
+|---|---|
+| `npm run dev` | Development server with instant reload |
+| `npm run lint` | Check the code style and common mistakes |
+| `npm run build` | Production build into `dist/` |
 
+## Files
+
+```
+frontend/src/
+├── main.tsx           # entry point
+├── AuthGate.tsx       # shows the login page until the user is signed in
+├── LoginPage.tsx      # sign in / sign up
+├── App.tsx            # dashboard and transactions
+├── AnalyticsPage.tsx  # analytics with charts
+├── SettingsPage.tsx   # bank token, markers, password, data
+├── api.ts             # every request to the backend (cookies, CSRF header)
+└── theme.css          # colours for light and dark theme
 ```

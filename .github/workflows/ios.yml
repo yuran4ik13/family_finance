@@ -1,0 +1,28 @@
+# iPhone app: builds the Xcode project for the simulator, so a broken build shows up on GitHub.
+# Runs only when files in ios/ (or this workflow) change.
+name: iOS app
+
+on:
+  push:
+    branches: [master]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  pull_request:
+    paths: ['ios/**', '.github/workflows/ios.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild build \
+            -project ios/FamilyFinance.xcodeproj \
+            -scheme FamilyFinance \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
