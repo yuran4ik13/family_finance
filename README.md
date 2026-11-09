@@ -12,6 +12,8 @@
   <img src="https://img.shields.io/badge/Express-000000?style=flat-square&logo=express&logoColor=white" />
   <img src="https://img.shields.io/badge/Prisma-2D3748?style=flat-square&logo=prisma&logoColor=white" />
   <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
+  <img src="https://img.shields.io/badge/Swift-F05138?style=flat-square&logo=swift&logoColor=white" />
+  <img src="https://img.shields.io/badge/SwiftUI-0D96F6?style=flat-square&logo=swift&logoColor=white" />
   <img src="https://img.shields.io/badge/status-in%20development-orange?style=flat-square" />
 </p>
 
@@ -63,7 +65,8 @@ With family_finance, a user **connects all their accounts once** and gets **one 
 
 | Part | Technologies |
 |---|---|
-| Frontend | React 19, TypeScript, Vite, Recharts |
+| Website | React 19, TypeScript, Vite, Recharts |
+| iPhone app | Swift, SwiftUI, Swift Charts, Keychain, Face ID |
 | Backend | Node.js, Express, TypeScript, Zod |
 | Security | scrypt password hashing, JWT in httpOnly cookies, Helmet, rate limiting |
 | Database | PostgreSQL, Prisma ORM |
@@ -71,93 +74,39 @@ With family_finance, a user **connects all their accounts once** and gets **one 
 
 ## 📁 Project structure
 
+One repository, three parts. Each part has its own guide and its own checks on GitHub.
+
+| Folder | What it is | Guide |
+|---|---|---|
+| [`backend/`](backend) | Server and API: login, bank sync, categories, reports, database | [backend/README.md](backend/README.md) |
+| [`frontend/`](frontend) | Website (React) | [frontend/README.md](frontend/README.md) |
+| [`ios/`](ios) | iPhone app (SwiftUI), works with the server or offline demo data | [ios/README.md](ios/README.md) |
+| `docs/` | Screenshots | |
+| `.github/` | Automatic checks: tests, builds, security scans, Dependabot | |
+
 ```
-family_finance/
-├── backend/            # Express API + Prisma
-│   ├── prisma/         # database schema and migrations
-│   ├── scripts/
-│   │   ├── create-user.ts          # create a login from the terminal
-│   │   ├── seed-demo.ts            # demo login with fake data
-│   │   └── import-env-settings.ts  # one-time move of old .env settings
-│   ├── src/
-│   │   ├── app.ts        # Express app: middleware order and routers
-│   │   ├── index.ts      # starts the server
-│   │   ├── routes/       # finance, monobank sync, settings & account
-│   │   ├── categorize.ts # per-user categorization rules
-│   │   ├── auth.ts       # login, sign up, sessions, access checks
-│   │   ├── security.ts   # Helmet, CORS, CSRF check, rate limits, errors
-│   │   ├── crypto.ts     # AES-256-GCM encryption of bank tokens
-│   │   ├── audit.ts      # security log
-│   │   ├── config.ts     # validates .env at startup
-│   │   ├── password.ts   # scrypt hashing + password policy
-│   │   ├── monobank.ts   # Monobank API client (per-token rate limit)
-│   │   ├── analytics.ts  # analytics reports
-│   │   └── prisma.ts     # database client
-│   ├── tests/          # security tests: users can't reach each other's data
-│   └── .env.example    # environment variables template
-├── docs/               # screenshots
-└── frontend/           # React app
-    └── src/
-        ├── AuthGate.tsx    # shows login until the user is signed in
-        ├── LoginPage.tsx   # sign in / sign up
-        ├── SettingsPage.tsx
-        ├── api.ts          # all requests to the backend
-        ├── App.tsx
-        └── AnalyticsPage.tsx
+                ┌──────────────┐
+  Website  ───► │              │
+                │   backend    │ ───► PostgreSQL
+ iPhone app ──► │  (REST API)  │ ───► Monobank API
+                └──────────────┘
 ```
+
+The website and the iPhone app never talk to the database or the bank directly:
+they only call the backend API, which checks who is signed in and returns only that user's data.
 
 ## 🚀 Getting started
 
-**Requirements:** Node.js 20+, PostgreSQL, a personal Monobank token from [api.monobank.ua](https://api.monobank.ua)
-
-**1. Clone the repository**
+**Requirements:** Node.js 20+, PostgreSQL. For the iPhone app: a Mac with Xcode.
 
 ```bash
 git clone https://github.com/yuran4ik13/family_finance.git
 cd family_finance
 ```
 
-**2. Set up the backend**
-
-```bash
-cd backend
-npm install
-cp .env.example .env      # then fill in your own values
-npx prisma migrate deploy # create database tables
-npx prisma generate       # generate the Prisma client
-npm run create-user -- you@example.com   # create your login (password is asked hidden)
-npm run dev               # http://localhost:3000
-```
-
-Required secrets in `.env`: `JWT_SECRET` (`openssl rand -base64 48`) and `ENCRYPTION_KEY` (`openssl rand -base64 32`).
-After signing in, open **Settings** and paste your Monobank token.
-
-**3. Set up the frontend** (in a new terminal)
-
-```bash
-cd frontend
-npm install
-npm run dev               # http://localhost:5173
-```
-
-**4. (Optional) Try it with fake data**
-
-```bash
-cd backend
-DEMO_EMAIL=demo@example.com DEMO_PASSWORD='choose-a-long-password' npm run seed:demo
-```
-
-This creates a **read-only** demo login with invented family members, cards and ~200 transactions.
-The fake data belongs only to the demo user; nobody else's data is touched.
-For a public demo server, still use a separate database.
-
-**5. Run the security tests** (needs an empty database whose name contains `test`)
-
-```bash
-cd backend
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/family_finance_test" npx prisma migrate deploy
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/family_finance_test" npm test
-```
+1. **Backend** → follow [backend/README.md](backend/README.md) (database, `.env`, first user)
+2. **Website** → follow [frontend/README.md](frontend/README.md)
+3. **iPhone app** → follow [ios/README.md](ios/README.md) (or just tap *Try with demo data*, no server needed)
 
 ## 🔐 Security
 
